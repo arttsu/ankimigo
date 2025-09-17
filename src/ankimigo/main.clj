@@ -25,7 +25,7 @@
   (case (:event/type event)
     ::increment (swap! *state update :count inc)))
 
-(defn -main [& args]
+(defn -main [& _args]
   (println "Starting AnkiMigo")
   (fx/mount-renderer *state
                      (fx/create-renderer

@@ -8,3 +8,7 @@ run:
 # Run cljfmt fix
 fmt:
     clj -M:dev -m cljfmt.main fix deps.edn src/
+
+# Run clj-kondo linter
+lint:
+    clj -M:dev -m clj-kondo.main --lint src
