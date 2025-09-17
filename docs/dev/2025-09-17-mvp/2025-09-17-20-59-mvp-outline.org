@@ -1,0 +1,87 @@
+* AnkiMigo: MVP Outline
+
+** 1. The Point of This Thing (Rationale)
+The goal is to build a small, useful desktop app that makes my Spanish learning better.
+It helps create personalized Anki cards using an LLM, without manually crafting prompts each time.
+
+First and foremost, this is for me. Second, it’s a cool project for my portfolio.
+If others find it useful later, that’s a bonus.
+
+The app is designed for "power users" who are comfortable with Anki and want more control over their workflow.
+Trust is key: running locally as a desktop app makes future API key usage more acceptable.
+
+** 2. How It Works (The App Design)
+The app is a single-window "workbench." All controls and outputs are visible at once, so the workflow is fast.
+
+*** UI Inputs
+- *Goal:* high-level learning objective (e.g., "Reach Spanish A2").
+- *Concept:* specific thing to learn right now (e.g., "querer").
+- *System Message:* main prompt template, collapsible (hidden by default).
+- *Persona:* short description of self (hobbies, job, etc).
+- *Themes:* multi-line text box. This is the /core mechanic/ for variety. A "Re-roll" button randomly selects themes to inject into the prompt, ensuring fresh, personalized examples every time.
+- *Colloquial Usage:* checkbox.
+- *Additional Instructions:* small optional one-time guidance.
+
+*** Prompt Assembly
+- Final Prompt is rendered live from inputs.
+- Displayed in a read-only box.
+- Has a button to copy to clipboard.
+
+*** Workflow
+1. Fill in inputs → see Final Prompt update.
+2. Click "Copy Prompt."
+3. Paste prompt into LLM that supports structured JSON output.
+4. Copy LLM’s fenced code block output.
+5. Paste into AnkiMigo.
+6. Click "Parse & Edit": tolerant parser extracts JSON from fence, fixes common issues, and shows editable cards.
+7. Review, tweak, select, and push cards to Anki.
+
+*** Additional Considerations
+- *Parser is tolerant:* handles stray backticks, trailing commas, extra prose.
+- *Editor Usability is Key:* The "Parse & Edit" view is where the app proves its worth. It must be easy to quickly fix typos, delete bad cards, and see validation errors clearly.
+- Deck + note type schema fetched from AnkiConnect; field mapping shown and saved per deck.
+- Card model kept minimal (noteType, fields, tags, metadata).
+- Errors are explicit: parsing shows pinpoint location; pushing shows Added/Skipped/Reason.
+
+** 3. What to Build First (The MVP)
+The MVP is finished when one complete, manual end-to-end cycle works reliably and feels good.
+
+*** Recommended First Step: The "Tracer Bullet"
+Before building the full UI, consider a minimal test to de-risk the core technical challenges. Prove the AnkiConnect integration and the tolerant parser work together with a hardcoded prompt, a simple paste area, and a "push" button. Once this thin slice works, building the full UI is much lower risk.
+
+*** Features INCLUDED in MVP
+- Single-window UI (cljfx).
+- Real-time Final Prompt assembly (with the "Re-roll" themes button).
+- "Copy Prompt" button → system clipboard.
+- Deck dropdown (fetched via AnkiConnect).
+- Persistence: save all input fields + last deck + field mappings in local config file (~/.ankimigo/config.edn).
+- Paste area for LLM output.
+- "Parse & Edit" button → tolerant JSON parser.
+- Editable card list with checkboxes and clear, actionable feedback.
+- "Push to Anki" button → validates deck, note type, fields; batch sends cards.
+- Friendly error messages and result table.
+
+*** Features EXCLUDED from MVP
+- No direct LLM API integration (manual copy/paste only).
+- No setup wizard.
+- No profile/template management.
+- No media (audio/image).
+- No background telemetry.
+
+** 4. Design Decisions
+- *Desktop app (cljfx):* chosen for learning value, trust, and zero hosting cost.
+- *Parser resilience:* assume messy output; recover where possible; show clear errors otherwise.
+- *System Prompt is the Secret Sauce:* The main prompt template is the engine of the app. The persistence model should treat it as a first-class citizen, making it easy for the user to tweak and perfect over time.
+- *State model:* single atom with pure event handlers (cljfx idioms).
+- *Persistence:* EDN config file; simple and transparent.
+- *User trust:* everything local, no hidden network calls.
+
+** 5. Future Directions (Post-MVP)
+- Add API key support:
+  - Stored securely (OS keychain if possible, else encrypted local file).
+  - Settings dialog for key management and cost guardrails.
+  - Mode toggle: "Manual" vs "LLM API".
+- Add profile/template saving.
+- Support for multiple note types and richer field mapping.
+- Optional export to CSV/TSV.
+- Distribution polish: native installers, signing.
