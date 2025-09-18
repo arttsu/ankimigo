@@ -40,6 +40,124 @@
 (def *state
   (atom (init-state)))
 
+(defn input-column [prompt-inputs]
+  {:fx/type :v-box
+   :spacing 10
+   :h-box/hgrow :always
+   :min-width 200
+   :pref-width 600
+   :max-width 400
+   :children [{:fx/type :label
+               :text "Input"
+               :style "-fx-font-weight: bold; -fx-font-size: 14px;"}
+              {:fx/type :separator}
+              {:fx/type :h-box
+               :spacing 10
+               :children [{:fx/type :label
+                           :text "Concept:"}]}
+              {:fx/type :text-field
+               :text (get-in prompt-inputs [:concept] "")
+               :on-text-changed {:event/type ::concept-changed}}]})
+
+(defn output-column [prompt-inputs llm-response]
+  {:fx/type :v-box
+   :spacing 10
+   :h-box/hgrow :always
+   :min-width 250
+   :pref-width 1000
+   :max-width 1000
+   :children [{:fx/type :label
+               :text "Output"
+               :style "-fx-font-weight: bold; -fx-font-size: 14px;"}
+              {:fx/type :separator}
+              {:fx/type :label
+               :text "Final Prompt:"}
+              {:fx/type :text-area
+               :text (prompt/render-prompt prompt-inputs)
+               :editable false
+               :wrap-text true
+               :v-box/vgrow :always}
+              {:fx/type :button
+               :text "Copy Prompt"
+               :max-width Double/MAX_VALUE
+               :on-action {:event/type ::copy-prompt}}
+              (if (empty? llm-response)
+                {:fx/type :button
+                 :text "Paste Response..."
+                 :max-width Double/MAX_VALUE
+                 :on-action {:event/type ::paste-response}}
+                {:fx/type :button
+                 :text "Clear"
+                 :max-width Double/MAX_VALUE
+                 :on-action {:event/type ::clear}})]})
+
+(defn card-list [parsed-cards]
+  {:fx/type :v-box
+   :v-box/vgrow :always
+   :children [(if (seq parsed-cards)
+                {:fx/type :v-box
+                 :spacing 5
+                 :children [{:fx/type :label
+                             :text (str "Cards to add (" (count parsed-cards) "):")}
+                            {:fx/type :scroll-pane
+                             :v-box/vgrow :always
+                             :fit-to-width true
+                             :content {:fx/type :v-box
+                                       :spacing 10
+                                       :padding 5
+                                       :children (map-indexed
+                                                  (fn [idx card]
+                                                    {:fx/type :v-box
+                                                     :spacing 5
+                                                     :style "-fx-background-color: #f0f0f0; -fx-padding: 10; -fx-background-radius: 5;"
+                                                     :children [{:fx/type :label
+                                                                 :text (str "Card " (inc idx))
+                                                                 :style "-fx-font-weight: bold;"}
+                                                                {:fx/type :label
+                                                                 :text (str "Front: " (:front card))
+                                                                 :wrap-text true}
+                                                                {:fx/type :label
+                                                                 :text (str "Back: " (:back card))
+                                                                 :wrap-text true}]})
+                                                  parsed-cards)}}]}
+                {:fx/type :label
+                 :text "No cards parsed yet"
+                 :style "-fx-text-fill: gray;"})]})
+
+(defn anki-controls []
+  [{:fx/type :separator}
+   {:fx/type :label
+    :text "Deck:"}
+   {:fx/type :combo-box
+    :disable true
+    :prompt-text "Select deck..."
+    :max-width Double/MAX_VALUE}
+   {:fx/type :button
+    :text "Fetch Decks"
+    :max-width Double/MAX_VALUE
+    :on-action {:event/type ::fetch-decks}}
+   {:fx/type :button
+    :text "Push to Anki"
+    :max-width Double/MAX_VALUE
+    :on-action {:event/type ::push-to-anki}}])
+
+(defn anki-column [parsed-cards]
+  {:fx/type :v-box
+   :spacing 10
+   :h-box/hgrow :always
+   :min-width 400
+   :pref-width 550
+   :children (concat [{:fx/type :label
+                       :text "Anki Integration"
+                       :style "-fx-font-weight: bold; -fx-font-size: 14px;"}
+                      {:fx/type :separator}
+                      (card-list parsed-cards)]
+                     (anki-controls))})
+
+(defn status-bar [status-message]
+  {:fx/type :label
+   :text status-message})
+
 (defn root [{:keys [prompt-inputs status-message llm-response parsed-cards]}]
   {:fx/type :stage
    :showing true
@@ -51,121 +169,16 @@
            :root {:fx/type :v-box
                   :spacing 10
                   :padding 10
-                  :children [;; Main three-column layout
+                  :children [;; Three-column main layout
                              {:fx/type :h-box
                               :spacing 20
                               :v-box/vgrow :always
-                              :children [;; Column 1: Input (smallest, but grows)
-                                         {:fx/type :v-box
-                                          :spacing 10
-                                          :h-box/hgrow :always
-                                          :min-width 200
-                                          :pref-width 600
-                                          :max-width 400
-                                          :children [{:fx/type :label
-                                                      :text "Input"
-                                                      :style "-fx-font-weight: bold; -fx-font-size: 14px;"}
-                                                     {:fx/type :separator}
-                                                     {:fx/type :h-box
-                                                      :spacing 10
-                                                      :children [{:fx/type :label
-                                                                  :text "Concept:"}]}
-                                                     {:fx/type :text-field
-                                                      :text (get-in prompt-inputs [:concept] "")
-                                                      :on-text-changed {:event/type ::concept-changed}}]}
-                                         ;; Column 2: Output (medium, grows)
-                                         {:fx/type :v-box
-                                          :spacing 10
-                                          :h-box/hgrow :always
-                                          :min-width 250
-                                          :pref-width 1000
-                                          :max-width 1000
-                                          :children [{:fx/type :label
-                                                      :text "Output"
-                                                      :style "-fx-font-weight: bold; -fx-font-size: 14px;"}
-                                                     {:fx/type :separator}
-                                                     {:fx/type :label
-                                                      :text "Final Prompt:"}
-                                                     {:fx/type :text-area
-                                                      :text (prompt/render-prompt prompt-inputs)
-                                                      :editable false
-                                                      :wrap-text true
-                                                      :v-box/vgrow :always}
-                                                     {:fx/type :button
-                                                      :text "Copy Prompt"
-                                                      :max-width Double/MAX_VALUE
-                                                      :on-action {:event/type ::copy-prompt}}
-                                                     (if (empty? llm-response)
-                                                       {:fx/type :button
-                                                        :text "Paste Response..."
-                                                        :max-width Double/MAX_VALUE
-                                                        :on-action {:event/type ::paste-response}}
-                                                       {:fx/type :button
-                                                        :text "Clear"
-                                                        :max-width Double/MAX_VALUE
-                                                        :on-action {:event/type ::clear}})]}
-                                         ;; Column 3: Anki Integration (largest, unbounded growth)
-                                         {:fx/type :v-box
-                                          :spacing 10
-                                          :h-box/hgrow :always
-                                          :min-width 400
-                                          :pref-width 550
-                                          :children [{:fx/type :label
-                                                      :text "Anki Integration"
-                                                      :style "-fx-font-weight: bold; -fx-font-size: 14px;"}
-                                                     {:fx/type :separator}
-                                                     ;; Card list section (scrollable, grows to fill space)
-                                                     {:fx/type :v-box
-                                                      :v-box/vgrow :always
-                                                      :children [(if (seq parsed-cards)
-                                                                   {:fx/type :v-box
-                                                                    :spacing 5
-                                                                    :children [{:fx/type :label
-                                                                                :text (str "Cards to add (" (count parsed-cards) "):")}
-                                                                               {:fx/type :scroll-pane
-                                                                                :v-box/vgrow :always
-                                                                                :fit-to-width true
-                                                                                :content {:fx/type :v-box
-                                                                                          :spacing 10
-                                                                                          :padding 5
-                                                                                          :children (map-indexed
-                                                                                                     (fn [idx card]
-                                                                                                       {:fx/type :v-box
-                                                                                                        :spacing 5
-                                                                                                        :style "-fx-background-color: #f0f0f0; -fx-padding: 10; -fx-background-radius: 5;"
-                                                                                                        :children [{:fx/type :label
-                                                                                                                    :text (str "Card " (inc idx))
-                                                                                                                    :style "-fx-font-weight: bold;"}
-                                                                                                                   {:fx/type :label
-                                                                                                                    :text (str "Front: " (:front card))
-                                                                                                                    :wrap-text true}
-                                                                                                                   {:fx/type :label
-                                                                                                                    :text (str "Back: " (:back card))
-                                                                                                                    :wrap-text true}]})
-                                                                                                     parsed-cards)}}]}
-                                                                   {:fx/type :label
-                                                                    :text "No cards parsed yet"
-                                                                    :style "-fx-text-fill: gray;"})]}
-                                                     ;; Anki controls section (always visible at bottom)
-                                                     {:fx/type :separator}
-                                                     {:fx/type :label
-                                                      :text "Deck:"}
-                                                     {:fx/type :combo-box
-                                                      :disable true
-                                                      :prompt-text "Select deck..."
-                                                      :max-width Double/MAX_VALUE}
-                                                     {:fx/type :button
-                                                      :text "Fetch Decks"
-                                                      :max-width Double/MAX_VALUE
-                                                      :on-action {:event/type ::fetch-decks}}
-                                                     {:fx/type :button
-                                                      :text "Push to Anki"
-                                                      :max-width Double/MAX_VALUE
-                                                      :on-action {:event/type ::push-to-anki}}]}]}
-                             ;; Status bar at bottom
+                              :children [(input-column prompt-inputs)
+                                         (output-column prompt-inputs llm-response)
+                                         (anki-column parsed-cards)]}
+                             ;; Status bar
                              {:fx/type :separator}
-                             {:fx/type :label
-                              :text status-message}]}}})
+                             (status-bar status-message)]}}})
 
 (defn map-event-handler [event]
   (case (:event/type event)
