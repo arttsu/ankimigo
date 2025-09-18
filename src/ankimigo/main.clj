@@ -1,6 +1,8 @@
 (ns ankimigo.main
   (:require [cljfx.api :as fx]
-            [ankimigo.prompt :as prompt])
+            [ankimigo.prompt :as prompt]
+            [clojure.string :as str])
+  (:import [javafx.scene.input Clipboard ClipboardContent])
   (:gen-class))
 
 ;; State update helpers
@@ -8,6 +10,20 @@
   "Updates a prompt input field"
   [state field-key new-value]
   (assoc-in state [:prompt-inputs field-key] new-value))
+
+;; Clipboard helper functions
+(defn copy-to-clipboard!
+  "Copy text to system clipboard using JavaFX"
+  [text]
+  (try
+    (let [clipboard (Clipboard/getSystemClipboard)
+          content (ClipboardContent.)]
+      (.putString content text)
+      (.setContent clipboard content)
+      true)
+    (catch Exception e
+      (println "Error copying to clipboard:" (.getMessage e))
+      false)))
 
 (defn init-state []
   {:prompt-inputs {:concept ""}
@@ -154,7 +170,17 @@
 (defn map-event-handler [event]
   (case (:event/type event)
     ::concept-changed (swap! *state update-prompt-input :concept (:fx/event event))
-    ::copy-prompt (println "Copy Prompt button clicked!")
+    ::copy-prompt (let [concept (get-in @*state [:prompt-inputs :concept] "")]
+                    (println "Copy Prompt button clicked!")
+                    (if (str/blank? concept)
+                      (do (println "Please enter a concept first!")
+                          (swap! *state assoc :status-message "Please enter a concept first!"))
+                      (let [prompt-text (prompt/render-prompt (:prompt-inputs @*state))]
+                        (if (copy-to-clipboard! prompt-text)
+                          (do (println "Successfully copied prompt to clipboard!")
+                              (swap! *state assoc :status-message "Prompt copied to clipboard!"))
+                          (do (println "Failed to copy prompt to clipboard!")
+                              (swap! *state assoc :status-message "Failed to copy prompt to clipboard!"))))))
     ::paste-response (do (println "Paste Response button clicked!")
                          ;; For testing, simulate adding a response and cards
                          (swap! *state assoc
