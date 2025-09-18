@@ -30,6 +30,7 @@
    :title "AnkiMigo - Tracer Bullet"
    :width 1200
    :height 700
+   :on-close-request (fn [_] (System/exit 0))
    :scene {:fx/type :scene
            :root {:fx/type :v-box
                   :spacing 10
