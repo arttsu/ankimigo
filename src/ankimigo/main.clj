@@ -154,11 +154,42 @@
                       (card-list parsed-cards)]
                      (anki-controls))})
 
+(defn paste-response-dialog [paste-dialog]
+  {:fx/type :stage
+   :showing (:visible paste-dialog)
+   :title "Paste LLM Response"
+   :modality :application-modal
+   :width 600
+   :height 400
+   :on-close-request {:event/type ::cancel-paste}
+   :scene {:fx/type :scene
+           :root {:fx/type :v-box
+                  :spacing 10
+                  :padding 20
+                  :children [{:fx/type :label
+                              :text "Paste the JSON response from your LLM (ChatGPT, Claude, etc.):"}
+                             {:fx/type :text-area
+                              :text (:text paste-dialog "")
+                              :wrap-text true
+                              :v-box/vgrow :always
+                              :on-text-changed {:event/type ::paste-dialog-text-changed}}
+                             {:fx/type :h-box
+                              :spacing 10
+                              :alignment :center-right
+                              :children [{:fx/type :button
+                                          :text "Cancel"
+                                          :on-action {:event/type ::cancel-paste}}
+                                         {:fx/type :button
+                                          :text "OK"
+                                          :default-button true
+                                          :disable (str/blank? (:text paste-dialog ""))
+                                          :on-action {:event/type ::confirm-paste}}]}]}}})
+
 (defn status-bar [status-message]
   {:fx/type :label
    :text status-message})
 
-(defn root [{:keys [prompt-inputs status-message llm-response parsed-cards]}]
+(defn root [{:keys [prompt-inputs status-message llm-response parsed-cards paste-dialog]}]
   {:fx/type :stage
    :showing true
    :title "AnkiMigo - Tracer Bullet"
@@ -195,26 +226,33 @@
                           (do (println "Failed to copy prompt to clipboard!")
                               (swap! *state assoc :status-message "Failed to copy prompt to clipboard!"))))))
     ::paste-response (do (println "Paste Response button clicked!")
-                         ;; For testing, simulate adding a response and cards
-                         (swap! *state assoc
-                                :llm-response "Test response"
-                                :parsed-cards [{:front "What is Clojure?" :back "A modern, functional, dynamic dialect of Lisp on the JVM"}
-                                               {:front "What is an atom in Clojure?" :back "A thread-safe reference type for managing synchronous, independent state"}
-                                               {:front "What does swap! do?" :back "Atomically swaps the value of an atom by applying a function to the current value"}
-                                               {:front "What is a vector in Clojure?" :back "An indexed, immutable, persistent collection with fast random access"}
-                                               {:front "What is lazy evaluation?" :back "A strategy where expressions are not evaluated until their results are needed"}
-                                               {:front "What is the REPL?" :back "Read-Eval-Print Loop - an interactive programming environment"}
-                                               {:front "What are keywords?" :back "Symbolic identifiers that evaluate to themselves, often used as map keys"}
-                                               {:front "What is destructuring?" :back "A way to bind names to values inside a data structure"}]))
+                         (swap! *state assoc-in [:paste-dialog :visible] true))
     ::clear (do (println "Clear button clicked!")
                 (swap! *state assoc :llm-response "" :parsed-cards []))
     ::fetch-decks (println "Fetch Decks button clicked!")
     ::push-to-anki (println "Push to Anki button clicked!")
+    ::cancel-paste (do (println "Cancel paste clicked!")
+                       (swap! *state assoc-in [:paste-dialog :visible] false)
+                       (swap! *state assoc-in [:paste-dialog :text] ""))
+    ::confirm-paste (do (println "Confirm paste clicked!")
+                        (let [pasted-text (get-in @*state [:paste-dialog :text] "")]
+                          (swap! *state assoc :llm-response pasted-text)
+                          (swap! *state assoc-in [:paste-dialog :visible] false)
+                          (swap! *state assoc-in [:paste-dialog :text] "")
+                          (swap! *state assoc :status-message (str "Pasted " (count pasted-text) " characters"))))
+    ::paste-dialog-text-changed (swap! *state assoc-in [:paste-dialog :text] (:fx/event event))
     (println "Unhandled event:" (:event/type event))))
 
 (defn -main [& _args]
   (println "Starting AnkiMigo Tracer Bullet")
+  ;; Main window renderer
   (fx/mount-renderer *state
                      (fx/create-renderer
                       :middleware (fx/wrap-map-desc assoc :fx/type root)
+                      :opts {:fx.opt/map-event-handler map-event-handler}))
+  ;; Dialog renderer
+  (fx/mount-renderer *state
+                     (fx/create-renderer
+                      :middleware (fx/wrap-map-desc (fn [state]
+                                                      (paste-response-dialog (:paste-dialog state))))
                       :opts {:fx.opt/map-event-handler map-event-handler})))
