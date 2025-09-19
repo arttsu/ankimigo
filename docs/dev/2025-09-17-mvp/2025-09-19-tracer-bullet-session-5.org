@@ -1,0 +1,245 @@
+* Tracer bullet session 5
+
+** What was accomplished
+
+*** Completed Stage 4: JSON Parsing Logic
+- ✅ JSON parsing from :llm-response using jsonista library
+- ✅ Card validation for required fields (name, front, back)
+- ✅ Invalid card display with visual feedback (pink background, error messages)
+- ✅ Actual card content displayed from parsed JSON
+- ✅ Clean error messages without stack traces
+- ✅ Atomic state updates to prevent race conditions
+
+*** Key improvements implemented
+- *Enhanced validation*: Cards marked as valid/invalid instead of filtered
+- *Visual feedback*: Invalid cards shown with pink background (#ffcccc) and error details
+- *Code organization*: Split large functions into smaller, focused helpers
+- *Better error UX*: Simple "Failed to parse JSON" message instead of technical stack traces
+- *Atomic operations*: All related state updates in single swap! calls using threading macro
+
+*** Development approach used
+- *Checkpoint-driven development*: Explicit CHECKPOINT steps between implementation tasks
+- *Incremental testing*: Verified each feature worked before moving to next
+- *User-focused design*: Showed invalid cards with helpful error messages instead of silently filtering
+- *Code refactoring*: Split complex card-list function into render-valid-card, render-invalid-card, render-card
+
+** Current code structure
+
+*** src/ankimigo/main.clj
+- *State shape* (unchanged):
+  ```clojure
+  {:prompt-inputs {:concept ""}
+   :status-message "Ready."
+   :llm-response ""
+   :parsed-cards []
+   :available-decks []
+   :selected-deck nil
+   :paste-dialog {:visible false :text ""}}
+  ```
+- *JSON parsing functions*:
+  - valid-card?: Validates card has all required non-empty fields
+  - parse-json-response: Parses JSON and marks cards as valid/invalid
+- *Card rendering functions*:
+  - render-valid-card: Shows normal card with name, front, back
+  - render-invalid-card: Shows error card with pink background and error message
+  - render-card: Container that delegates to appropriate renderer
+  - card-list: Simplified to handle overall structure
+- *Event handlers updated*:
+  - ::confirm-paste: Now parses JSON and updates :parsed-cards
+  - ::cancel-paste: Atomic state updates
+  - Error handling with auto-clear on parse failure
+
+*** Key technical patterns established
+- *Card validation*: Each card marked with :valid true/false and :error message
+- *Atomic state updates*: Threading macro (-> %) for multiple updates in single swap!
+- *Visual error feedback*: Invalid cards shown with different styling and error details
+- *Function decomposition*: Large UI functions split into smaller, focused helpers
+- *User-friendly errors*: Generic error messages instead of technical stack traces
+
+** Test procedure for current state
+
+1. Run application: =clojure -M -m ankimigo.main=
+2. Verify three-column layout appears
+3. **Test JSON parsing workflow**:
+   - Type concept (e.g., "perro")
+   - Click "Paste Response..." - modal dialog appears
+   - Paste valid JSON:
+     ```json
+     {
+       "cards": [
+         {
+           "name": "perro",
+           "front": "el perro",
+           "back": "the dog"
+         },
+         {
+           "name": "gato",
+           "front": "el gato",
+           "back": "the cat"
+         }
+       ]
+     }
+     ```
+   - Click OK - see "Successfully parsed 2 cards" in status
+   - Verify cards display with name in title (e.g., "Card 1: perro")
+4. **Test invalid card handling**:
+   - Click "Clear", then "Paste Response..."
+   - Paste JSON with missing field:
+     ```json
+     {
+       "cards": [
+         {
+           "name": "valid card",
+           "front": "frente",
+           "back": "back"
+         },
+         {
+           "name": "invalid card",
+           "front": "",
+           "back": "has empty front"
+         }
+       ]
+     }
+     ```
+   - Click OK - both cards shown, invalid one with pink background
+   - Verify error message shows "Missing or empty front"
+5. **Test JSON parse error**:
+   - Click "Clear", then "Paste Response..."
+   - Paste invalid JSON: `{invalid json}`
+   - Click OK - see "JSON parsing error: Failed to parse JSON. Please check the format."
+   - Verify :llm-response and :parsed-cards are cleared
+6. **Test clear functionality**:
+   - With parsed cards showing, click "Clear"
+   - Verify all cards removed and button returns to "Paste Response..."
+7. Close window - verify app exits completely
+
+** References
+
+*** Tracer bullet specification
+- [[file:2025-09-18-0832-tracer-bullet-requirements.md][Requirements document]]
+- [[file:2025-09-18-0900-tracer-bullet-implementation-spec.md][Implementation stages]]
+- [[file:2025-09-18-1031-tracer-bullet-session-1.org][Session 1 notes]]
+- [[file:2025-09-18-1625-tracer-bullet-session-2.org][Session 2 notes]]
+- [[file:2025-09-18-1815-tracer-bullet-session-3.org][Session 3 notes]]
+- [[file:2025-09-18-1844-tracer-bullet-session-4.org][Session 4 notes]]
+
+*** Code files modified
+- =src/ankimigo/main.clj= - Stage 4 JSON parsing implementation completed
+- =src/ankimigo/prompt.clj= - Unchanged from session 1
+- =deps.edn= - Unchanged (jsonista already added)
+
+** Next steps
+
+*** Stage 5: AnkiConnect Deck Fetching
+*Ready to implement*:
+- [ ] HTTP request to AnkiConnect using hato library
+- [ ] Parse deck list from AnkiConnect response
+- [ ] Populate :available-decks from Anki's deck list
+- [ ] Enable deck dropdown with real deck names
+- [ ] Select first deck by default for convenience
+- [ ] Error handling for AnkiConnect connection failures
+- [ ] Status messages for fetch operations
+
+*** Stage 6: AnkiConnect Card Pushing
+- [ ] Construct addNote actions for each valid parsed card
+- [ ] Skip invalid cards (only push :valid true cards)
+- [ ] Send batch request to AnkiConnect for card creation
+- [ ] Handle success/failure responses with user feedback
+- [ ] Update status messages for push operation results
+- [ ] Handle duplicate card scenarios
+- [ ] Clear cards after successful push
+
+** Technical debt and improvements
+
+*** From previous sessions (still relevant)
+- State shape validation (consider clojure.spec)
+- Component organization as UI grows
+- Consider timeout for status messages (auto-clear after 5 seconds)
+- Add keyboard shortcuts for dialog (Enter for OK, Escape for Cancel)
+
+*** New from session 5
+- Consider more specific JSON error messages (empty input, missing cards field, etc.)
+- Add card count validation (warn if no valid cards to push)
+- Consider adding card edit functionality before pushing
+- Add progress indicator for long operations (deck fetch, card push)
+- Consider persisting last selected deck in preferences
+
+** Session 6 prep
+
+*** Quick start
+```bash
+cd /home/art/repos/ankimigo
+clojure -M -m ankimigo.main
+```
+
+*** Focus areas for Stage 5
+1. Start with AnkiConnect deck fetching
+2. Use hato library for HTTP requests
+3. AnkiConnect endpoint: http://localhost:8765
+4. Request format:
+   ```json
+   {
+     "action": "deckNames",
+     "version": 6
+   }
+   ```
+5. Response format:
+   ```json
+   {
+     "result": ["Default", "Spanish", "Programming"],
+     "error": null
+   }
+   ```
+
+*** Dependencies ready
+- hato v1.0.0 already in deps.edn for HTTP requests
+- jsonista for parsing AnkiConnect responses
+
+*** Remember
+- Keep using incremental approach with checkpoints
+- Test with actual AnkiConnect instance running
+- Handle connection errors gracefully
+- Preserve all existing functionality while adding deck fetching
+- Only push cards marked as :valid true
+
+*** Current working features to preserve
+- JSON parsing with validation and error display
+- Invalid cards shown with pink background and error messages
+- Modal dialog with text pasting and validation
+- Real clipboard copying with validation and status messages
+- Three-column responsive layout
+- Prompt generation with concept interpolation
+- Atomic state updates
+- Clean error messages without stack traces
+
+*** AnkiConnect setup reminder
+- Ensure Anki is running with AnkiConnect add-on installed
+- Default port: 8765
+- May need to configure CORS in AnkiConnect settings
+- Test connection with: `curl localhost:8765 -X POST -d '{"action":"version","version":6}'`
+
+*** Expected card format for AnkiConnect
+```json
+{
+  "action": "addNote",
+  "version": 6,
+  "params": {
+    "note": {
+      "deckName": "Spanish",
+      "modelName": "Basic",
+      "fields": {
+        "Front": "el perro",
+        "Back": "the dog"
+      }
+    }
+  }
+}
+```
+
+*** Current state ready for Stage 5
+- :parsed-cards contains validated card objects with :valid field
+- :available-decks is empty array waiting for deck names
+- :selected-deck is nil, ready to store selected deck
+- Deck dropdown exists but is disabled
+- "Fetch Decks" button ready to trigger HTTP request
+- Card display working with real parsed data
