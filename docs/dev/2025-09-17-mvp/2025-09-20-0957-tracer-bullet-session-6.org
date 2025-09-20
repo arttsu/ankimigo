@@ -1,0 +1,273 @@
+* Tracer bullet session 6
+
+** What was accomplished
+
+*** Completed Stage 5: AnkiConnect Deck Fetching
+- ✅ HTTP communication with AnkiConnect using hato library
+- ✅ fetch-deck-names function to retrieve available decks
+- ✅ "Fetch Decks" button wired to make API request
+- ✅ Deck dropdown populated with fetched deck names
+- ✅ Deck selection updates :selected-deck in state
+- ✅ First deck auto-selected when fetched
+- ✅ Error handling for connection failures with user-friendly messages
+- ✅ Status bar updates for all operations
+
+*** Key improvements implemented
+- *HTTP integration*: Clean function to communicate with AnkiConnect API
+- *State management*: Proper flow from fetch -> populate -> select
+- *UI responsiveness*: Dropdown disabled when no decks, enabled when populated
+- *Error resilience*: Graceful handling when Anki not running or AnkiConnect missing
+- *User feedback*: Clear status messages for all operations
+
+*** Development approach used
+- *Incremental implementation with CHECKPOINTs*: Each task followed by verification
+- *Test-first validation*: Tested AnkiConnect connection before implementing
+- *Progressive enhancement*: Button handler -> state update -> UI binding
+- *Error testing*: Verified error messages display correctly
+
+** Current code structure
+
+*** src/ankimigo/main.clj
+- *State shape* (updated):
+  ```clojure
+  {:prompt-inputs {:concept ""}
+   :status-message "Ready."
+   :llm-response ""
+   :parsed-cards []
+   :available-decks []      ; Now populated with deck names
+   :selected-deck nil       ; Now holds selected deck name
+   :paste-dialog {:visible false :text ""}}
+  ```
+- *New AnkiConnect functions*:
+  - anki-connect-url: Constant for API endpoint
+  - fetch-deck-names: HTTP POST to get deck list
+- *Updated UI components*:
+  - anki-controls: Now accepts available-decks and selected-deck params
+  - anki-column: Passes deck state to anki-controls
+  - root: Includes available-decks and selected-deck in destructuring
+- *New event handlers*:
+  - ::fetch-decks: Calls fetch-deck-names and updates state
+  - ::deck-selected: Updates :selected-deck when user selects
+
+*** Key technical patterns established
+- *HTTP error handling*: try-catch with informative error messages
+- *Response parsing*: Check for AnkiConnect error field before using result
+- *Auto-selection*: First deck selected automatically on fetch
+- *State consistency*: Both decks and selection updated atomically
+- *UI state binding*: Dropdown enable/disable based on deck availability
+
+** Test procedure for current state
+
+1. Run application: =clojure -M -m ankimigo.main=
+2. Verify three-column layout appears
+3. **Test deck fetching workflow**:
+   - Click "Fetch Decks" button
+   - Verify status shows "Fetching decks from Anki..."
+   - Verify status updates to "Found X decks"
+   - Verify dropdown enables and shows deck names
+   - Verify first deck is auto-selected
+4. **Test deck selection**:
+   - Change selection in dropdown
+   - Verify selection persists (state updated)
+5. **Test with cards workflow**:
+   - Enter concept (e.g., "perro")
+   - Copy prompt, paste to LLM, get response
+   - Paste JSON response with cards
+   - Fetch decks and select target deck
+   - Verify selected deck shown in dropdown
+6. **Test error handling**:
+   - Stop Anki
+   - Click "Fetch Decks"
+   - Verify error message: "Failed to connect to Anki. Is Anki running with AnkiConnect?"
+   - Start Anki, retry - should work
+7. **Test full Stage 4 + 5 integration**:
+   - Parse cards from JSON
+   - Fetch and select deck
+   - All features should work together
+
+** References
+
+*** Tracer bullet specification
+- [[file:2025-09-18-0832-tracer-bullet-requirements.md][Requirements document]]
+- [[file:2025-09-18-0900-tracer-bullet-implementation-spec.md][Implementation stages]]
+- [[file:2025-09-18-1031-tracer-bullet-session-1.org][Session 1 notes]]
+- [[file:2025-09-18-1625-tracer-bullet-session-2.org][Session 2 notes]]
+- [[file:2025-09-18-1815-tracer-bullet-session-3.org][Session 3 notes]]
+- [[file:2025-09-18-1844-tracer-bullet-session-4.org][Session 4 notes]]
+- [[file:2025-09-19-2030-tracer-bullet-session-5.org][Session 5 notes]]
+
+*** Code files modified
+- =src/ankimigo/main.clj= - Stage 5 AnkiConnect deck fetching completed
+- =src/ankimigo/prompt.clj= - Unchanged from session 1
+- =deps.edn= - Unchanged (hato already added in earlier session)
+
+** Next steps
+
+*** Stage 6: AnkiConnect Card Pushing
+*Ready to implement*:
+- [ ] Construct addNote actions for each valid parsed card
+- [ ] Filter to only push cards with :valid true flag
+- [ ] Send batch request to AnkiConnect for card creation
+- [ ] Handle success/failure responses with user feedback
+- [ ] Update status messages for push operation results
+- [ ] Handle duplicate card scenarios gracefully
+- [ ] Clear cards after successful push
+- [ ] Disable push button when no valid cards or no deck selected
+
+*** Implementation details for Stage 6
+
+**** AnkiConnect addNote format
+```json
+{
+  "action": "addNote",
+  "version": 6,
+  "params": {
+    "note": {
+      "deckName": "Spanish",
+      "modelName": "Basic",
+      "fields": {
+        "Front": "el perro",
+        "Back": "the dog"
+      },
+      "tags": ["ankimigo"]
+    }
+  }
+}
+```
+
+**** Batch request format (addNotes)
+```json
+{
+  "action": "addNotes",
+  "version": 6,
+  "params": {
+    "notes": [
+      {
+        "deckName": "Spanish",
+        "modelName": "Basic",
+        "fields": {
+          "Front": "el perro",
+          "Back": "the dog"
+        },
+        "tags": ["ankimigo"]
+      },
+      {
+        "deckName": "Spanish",
+        "modelName": "Basic",
+        "fields": {
+          "Front": "el gato",
+          "Back": "the cat"
+        },
+        "tags": ["ankimigo"]
+      }
+    ]
+  }
+}
+```
+
+**** Response handling
+- Success: Returns array of note IDs (null for failures)
+- Example: {"result": [1234567890, null, 1234567891], "error": null}
+- null in result array means that specific card failed (likely duplicate)
+
+** Technical debt and improvements
+
+*** From previous sessions (still relevant)
+- State shape validation (consider clojure.spec)
+- Component organization as UI grows
+- Consider timeout for status messages (auto-clear after 5 seconds)
+- Add keyboard shortcuts for dialog (Enter for OK, Escape for Cancel)
+- Consider more specific JSON error messages
+- Add card count validation
+- Consider adding card edit functionality before pushing
+- Add progress indicator for long operations
+- Consider persisting last selected deck in preferences
+
+*** New from session 6
+- Consider adding "Refresh Decks" functionality
+- Add visual indicator when deck list is stale
+- Consider caching deck list with TTL
+- Add connection status indicator (green/red dot)
+- Consider supporting multiple deck selection for different cards
+- Add configuration for default model name (currently hardcoded to "Basic")
+
+** Session 7 prep
+
+*** Quick start
+```bash
+cd /home/art/repos/ankimigo
+clojure -M -m ankimigo.main
+```
+
+*** Focus areas for Stage 6
+1. Start with single card push to verify format
+2. Then implement batch push for efficiency
+3. Handle duplicates gracefully
+4. Clear cards on success, keep on failure
+5. Show detailed results (X cards added, Y duplicates)
+
+*** Implementation approach with CHECKPOINTs
+1. Add push-cards-to-anki function
+2. CHECKPOINT: Test with single card
+3. Update to handle batch operations
+4. CHECKPOINT: Test with multiple cards
+5. Wire up Push to Anki button
+6. CHECKPOINT: Button triggers push and updates state
+7. Add duplicate handling
+8. CHECKPOINT: Duplicates handled gracefully
+9. Add success/failure feedback
+10. CHECKPOINT: User sees clear results
+11. Clear cards on success
+12. CHECKPOINT: Full flow works end-to-end
+
+*** Dependencies ready
+- hato v1.0.0 for HTTP requests
+- jsonista for JSON serialization
+- All AnkiConnect communication patterns established
+
+*** Remember
+- Keep using incremental approach with explicit CHECKPOINTs
+- Test with actual AnkiConnect instance
+- Only push cards marked as :valid true
+- Preserve all existing functionality
+- Use "Basic" model (most common, always available)
+- Add "ankimigo" tag to all created cards for tracking
+- Show detailed feedback (not just "success/failed")
+
+*** Current working features to preserve
+- JSON parsing with validation and error display
+- Invalid cards shown with pink background
+- Modal dialog for pasting LLM responses
+- Clipboard copying with validation
+- Three-column responsive layout
+- Prompt generation with concept interpolation
+- Deck fetching and selection from AnkiConnect
+- Error handling for connection issues
+- Atomic state updates
+- Clean error messages
+
+*** Testing checklist for Stage 6
+1. Valid cards get pushed successfully
+2. Invalid cards are skipped (not sent to Anki)
+3. Duplicate cards handled gracefully
+4. Clear status messages for all outcomes
+5. Cards cleared after successful push
+6. Push button disabled when appropriate
+7. Selected deck used for card creation
+8. All cards get "ankimigo" tag
+
+*** Edge cases to handle
+- No deck selected -> Show error message
+- No valid cards -> Show warning
+- AnkiConnect fails mid-operation -> Show error
+- Some cards succeed, some fail -> Show detailed results
+- All cards are duplicates -> Show appropriate message
+
+*** Current state ready for Stage 6
+- :parsed-cards contains validated cards with :valid flag
+- :available-decks populated from AnkiConnect
+- :selected-deck holds user's deck choice
+- fetch-deck-names function establishes HTTP pattern
+- Error handling patterns established
+- Status messaging system in place
+- All UI components wired and working

@@ -1,0 +1,86 @@
+* Tracer bullet session 1
+
+** What was accomplished
+
+*** Successfully built incremental cljfx foundation
+- Started with basic "hello world" cljfx app (button + counter)
+- Added state structure with prompt-inputs, status-message
+- Added concept text field with live updates
+- Added rendered prompt display in text area
+- All components working with real-time updates
+
+*** Key refactoring decisions made
+- *Template loading*: Load prompt template once at startup vs on every render (performance)
+- *Function signatures*: render-prompt now accepts whole prompt-inputs map vs individual fields (flexibility for future fields)
+- *State updates*: Created atomic state update helpers vs multiple swap! calls (correctness)
+- *Derived state*: Removed rendered-prompt from state, compute on render (simplicity, single source of truth)
+
+*** Development approach validated
+- Step-by-step incremental development with checkpoints
+- Test each addition before proceeding
+- This approach successfully identified and avoided the original nil lifecycle errors
+
+** Current code structure
+
+*** src/ankimigo/main.clj
+- State: =*state= atom with prompt-inputs and status-message
+- UI: root function with concept input field and rendered prompt text area
+- Events: concept-changed handler using update-prompt-input helper
+- State helpers: update-prompt-input for clean atomic updates
+
+*** src/ankimigo/prompt.clj
+- Template loading: prompt-template def loaded once at startup
+- Error handling: template-loaded? check with user-friendly error messages
+- Rendering: render-prompt accepts full prompt-inputs map, handles concept replacement
+
+*** Key technical concepts learned/applied
+- *cljfx state management*: Atoms, destructuring, unidirectional data flow (Events → State → UI)
+- *Atomic updates*: Single swap! vs multiple swap! operations
+- *Derived vs stored state*: When to compute on render vs store in state
+- *Error handling*: Template loading failures displayed in UI
+
+** References
+
+*** Tracer bullet specification
+- [[file:2025-09-18-08-32-tracer-bullet-requirements.md][Requirements document]]
+- [[file:2025-09-18-09-00-tracer-bullet-implementation-spec.md][Implementation stages]]
+
+*** Code files modified
+- =src/ankimigo/main.clj= - main UI and event handling
+- =src/ankimigo/prompt.clj= - template loading and rendering
+- =deps.edn= - added hato v1.0.0 and jsonista v0.3.13
+
+** Next steps
+
+*** Complete Stage 1: Core UI Layout & State Initialization
+*Current status*: PARTIALLY COMPLETE
+- ✅ Concept input field
+- ✅ Final Prompt text area (read-only)
+- ✅ Status message
+- ❌ THREE-COLUMN layout (currently single column)
+- ❌ Copy Prompt button placeholder
+- ❌ Paste Response button placeholder
+- ❌ Clear button placeholder
+- ❌ Deck dropdown placeholder (disabled)
+- ❌ Card list view placeholder (not visible)
+- ❌ Fetch Decks button placeholder
+- ❌ Push to Anki button placeholder
+
+*Need to add remaining UI placeholders from Stage 1 specification before moving to Stage 2*
+
+*** Then continue with implementation spec stages
+- Stage 2: Prompt Generation & Copy to Clipboard
+- Stage 3: Response Pasting Dialog & Initial State Update
+- Stage 4: JSON Parsing Logic & Card List Display
+- Stage 5: AnkiConnect Deck Fetching
+- Stage 6: AnkiConnect Card Pushing
+
+*** Technical debt to consider
+- State shape validation (maps are flexible but brittle - consider specs later)
+- More sophisticated error handling patterns
+- Component organization as UI grows
+
+*** Future session prep
+- Run =clojure -M -m ankimigo.main= to verify current state
+- Continue from Step 4 in implementation spec
+- Consider adding more prompt template fields (themes, persona, etc)

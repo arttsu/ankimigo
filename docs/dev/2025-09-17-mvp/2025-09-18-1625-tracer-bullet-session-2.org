@@ -1,0 +1,154 @@
+* Tracer bullet session 2
+
+** What was accomplished
+
+*** Completed Stage 1: Core UI Layout & State Initialization
+- ✅ THREE-COLUMN responsive layout implemented
+  - Column 1 (Input): Narrowest, grows to 400px max
+  - Column 2 (Output): Medium, grows to 1000px max
+  - Column 3 (Anki): Largest, unbounded growth, gets most space
+- ✅ All UI button placeholders with console logging
+  - Copy Prompt button (below Final Prompt)
+  - Paste Response.../Clear toggle button (context-aware)
+  - Fetch Decks button
+  - Push to Anki button
+- ✅ Disabled deck dropdown with "Select deck..." placeholder
+- ✅ Card list view with visual card display
+  - Shows as scrollable cards with front/back text
+  - Hidden initially ("No cards parsed yet")
+  - Displays after paste response simulation
+- ✅ Window close handler (System/exit on close)
+
+*** Key UI/UX improvements implemented
+- *Visual card display*: Cards shown as rounded rectangles with:
+  - Card number (Card 1, Card 2, etc.)
+  - Front and Back text clearly labeled
+  - Gray background for visual separation
+- *Smart button toggling*: Paste Response.../Clear buttons swap based on state
+- *Scrollable card area*: Card list scrolls while Anki controls remain fixed
+- *Responsive layout*: Columns scale proportionally on window resize/maximize
+
+*** Development approach used
+- *Incremental development with checkpoints*: 15 small steps, each tested
+- *Immediate testing*: Test buttons print to console for verification
+- *Fix-as-you-go*: Caught and fixed nil lifecycle error with when/concat pattern
+- *User feedback integration*: Adjusted column widths and card display per request
+
+** Current code structure
+
+*** src/ankimigo/main.clj
+- *State shape*:
+  ```clojure
+  {:prompt-inputs {:concept ""}
+   :status-message "Ready."
+   :llm-response ""
+   :parsed-cards []
+   :available-decks []
+   :selected-deck nil
+   :paste-dialog {:visible false :text ""}}
+  ```
+- *UI structure*: Three-column H-box layout with responsive sizing
+- *Event handlers*: All buttons connected with console logging placeholders
+- *Window management*: on-close-request handler for clean exit
+- *Test data*: 8 sample Clojure cards for scrolling tests
+
+*** src/ankimigo/prompt.clj
+- Template loading: prompt-template def loaded once at startup
+- Error handling: template-loaded? check with user-friendly error messages
+- Rendering: render-prompt accepts full prompt-inputs map, handles concept replacement
+
+*** Key technical patterns established
+- *cljfx nil handling*: Use concat to build child vectors, avoiding nil in collections
+- *Conditional UI*: (when (seq parsed-cards) ...) for optional components
+- *State-driven UI*: Button text/visibility changes based on llm-response state
+- *Responsive sizing*: h-box/hgrow :always with min/pref/max-width constraints
+- *ScrollPane usage*: Wrap card list in scroll-pane with fit-to-width true
+
+** Test procedure for current state
+
+1. Run application: =clojure -M -m ankimigo.main=
+2. Verify three-column layout appears
+3. Type in Concept field - see prompt update in real-time
+4. Click "Copy Prompt" - see console message
+5. Click "Paste Response..." - button changes to "Clear", cards appear
+6. Scroll through 8 test cards
+7. Click "Clear" - cards disappear, button returns to "Paste Response..."
+8. Click "Fetch Decks" and "Push to Anki" - see console messages
+9. Maximize window - verify columns scale proportionally
+10. Close window - verify app exits completely (no Ctrl-C needed)
+
+** References
+
+*** Tracer bullet specification
+- [[file:2025-09-18-0832-tracer-bullet-requirements.md][Requirements document]]
+- [[file:2025-09-18-0900-tracer-bullet-implementation-spec.md][Implementation stages]]
+- [[file:2025-09-18-1031-tracer-bullet-session-1.org][Session 1 notes]]
+
+*** Code files modified
+- =src/ankimigo/main.clj= - Complete Stage 1 UI implementation
+- =src/ankimigo/prompt.clj= - Unchanged from session 1
+- =deps.edn= - Unchanged (hato v1.0.0 and jsonista v0.3.13 already added)
+
+** Next steps
+
+*** Stage 2: Prompt Generation & Copy to Clipboard
+*Ready to implement*:
+- [ ] Real clipboard integration for Copy Prompt button
+- [ ] Validation for empty concept field
+- [ ] Status message updates ("Prompt copied!", error messages)
+
+*** Stage 3: Response Pasting Dialog
+- [ ] Modal dialog with text area for pasting
+- [ ] OK/Cancel buttons
+- [ ] State management for dialog visibility
+- [ ] Store pasted text in :llm-response
+
+*** Stage 4: JSON Parsing Logic
+- [ ] Parse JSON from :llm-response using jsonista
+- [ ] Extract card data into :parsed-cards format
+- [ ] Display actual card content (not test data)
+- [ ] Error handling for invalid JSON
+
+*** Stage 5: AnkiConnect Deck Fetching
+- [ ] HTTP request to AnkiConnect using hato
+- [ ] Populate :available-decks
+- [ ] Enable deck dropdown
+- [ ] Select first deck by default
+
+*** Stage 6: AnkiConnect Card Pushing
+- [ ] Construct addNote actions for each card
+- [ ] Send batch request to AnkiConnect
+- [ ] Handle success/failure responses
+- [ ] Update status messages
+
+** Technical debt and improvements
+
+*** From session 1 (still relevant)
+- State shape validation (consider clojure.spec)
+- More sophisticated error handling patterns
+- Component organization as UI grows
+
+*** New from session 2
+- Extract card component into separate function (repeated UI pattern)
+- Consider extracting column definitions for cleaner code
+- Add keyboard shortcuts (Cmd+C for copy, etc.)
+- Consider adding card preview/edit before pushing
+
+** Session 3 prep
+
+*** Quick start
+```bash
+cd /home/art/repos/ankimigo
+clojure -M -m ankimigo.main
+```
+
+*** Focus areas
+1. Start with Stage 2 (clipboard integration)
+2. Use Java's Toolkit.getDefaultToolkit().getSystemClipboard()
+3. Add proper validation and status messages
+4. Test with real prompt generation
+
+*** Remember
+- Keep using incremental approach with checkpoints
+- Test each clipboard operation thoroughly
+- Consider cross-platform clipboard compatibility

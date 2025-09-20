@@ -1,0 +1,155 @@
+* Tracer bullet session 3
+
+** What was accomplished
+
+*** Completed Stage 2: Prompt Generation & Copy to Clipboard
+- ✅ REAL clipboard integration using JavaFX (cross-platform, no dependencies)
+- ✅ Concept field validation with user-friendly error messages
+- ✅ Actual prompt copying with concept interpolation (not dummy text)
+- ✅ Status message feedback for all clipboard operations
+- ✅ JavaFX clipboard works where Java AWT failed (headless environment issue)
+
+*** Key improvements implemented
+- *Cross-platform clipboard*: JavaFX clipboard API works reliably across environments
+- *Input validation*: Prevents copying when concept field is empty
+- *Real prompt generation*: Copies actual rendered prompt with {{concept}} interpolation
+- *User feedback*: Status bar shows "Prompt copied to clipboard!" or validation errors
+- *Error handling*: Graceful clipboard failure handling with user notification
+
+*** Development approach used
+- *Incremental development with checkpoints*: Small testable steps
+- *Problem-solving*: Switched from Java AWT to JavaFX when clipboard failed
+- *Cross-platform thinking*: Chose solution that works without external dependencies
+- *User experience focus*: Added validation and clear status messages
+
+** Current code structure
+
+*** src/ankimigo/main.clj
+- *State shape*:
+  ```clojure
+  {:prompt-inputs {:concept ""}
+   :status-message "Ready."
+   :llm-response ""
+   :parsed-cards []
+   :available-decks []
+   :selected-deck nil
+   :paste-dialog {:visible false :text ""}}
+  ```
+- *UI structure*: Three-column H-box layout with responsive sizing
+- *Event handlers*: All buttons connected, clipboard functionality implemented
+- *Window management*: on-close-request handler for clean exit
+- *Clipboard integration*: JavaFX-based copy-to-clipboard! function
+- *Validation*: Concept field validation with status message updates
+
+*** src/ankimigo/prompt.clj
+- Template loading: prompt-template def loaded once at startup
+- Error handling: template-loaded? check with user-friendly error messages
+- Rendering: render-prompt accepts full prompt-inputs map, handles concept replacement
+
+*** Key technical patterns established
+- *JavaFX integration*: Using JavaFX clipboard instead of AWT for better compatibility
+- *Input validation*: str/blank? checks with user feedback
+- *State management*: Atomic state updates with status message synchronization
+- *Error handling*: Try-catch blocks with user-friendly error messages
+- *Cross-platform*: JavaFX clipboard works in headless and GUI environments
+
+** Test procedure for current state
+
+1. Run application: =clojure -M -m ankimigo.main=
+2. Verify three-column layout appears
+3. **Test empty concept validation**:
+   - Leave Concept field empty
+   - Click "Copy Prompt" - see "Please enter a concept first!" in status
+4. **Test real prompt copying**:
+   - Type concept (e.g., "functional programming")
+   - Click "Copy Prompt" - see "Prompt copied to clipboard!" in status
+   - Paste elsewhere to verify actual prompt with concept interpolated
+5. Click "Paste Response..." - button changes to "Clear", test cards appear
+6. Scroll through 8 test cards
+7. Click "Clear" - cards disappear, button returns to "Paste Response..."
+8. Click "Fetch Decks" and "Push to Anki" - see console messages
+9. Maximize window - verify columns scale proportionally
+10. Close window - verify app exits completely (no Ctrl-C needed)
+
+** References
+
+*** Tracer bullet specification
+- [[file:2025-09-18-0832-tracer-bullet-requirements.md][Requirements document]]
+- [[file:2025-09-18-0900-tracer-bullet-implementation-spec.md][Implementation stages]]
+- [[file:2025-09-18-1031-tracer-bullet-session-1.org][Session 1 notes]]
+- [[file:2025-09-18-1625-tracer-bullet-session-2.org][Session 2 notes]]
+
+*** Code files modified
+- =src/ankimigo/main.clj= - Stage 2 clipboard implementation completed
+- =src/ankimigo/prompt.clj= - Unchanged from session 1
+- =deps.edn= - Unchanged (hato v1.0.0 and jsonista v0.3.13 already added)
+
+** Next steps
+
+*** Stage 3: Response Pasting Dialog
+*Ready to implement*:
+- [ ] Modal dialog with text area for pasting LLM responses
+- [ ] OK/Cancel buttons for dialog
+- [ ] Dialog state management (:paste-dialog visibility)
+- [ ] Store pasted text in :llm-response state
+- [ ] Replace current "Paste Response..." placeholder behavior
+
+*** Stage 4: JSON Parsing Logic
+- [ ] Parse JSON from :llm-response using jsonista
+- [ ] Extract card data into :parsed-cards format
+- [ ] Display actual card content (not test data)
+- [ ] Error handling for invalid JSON
+
+*** Stage 5: AnkiConnect Deck Fetching
+- [ ] HTTP request to AnkiConnect using hato
+- [ ] Populate :available-decks
+- [ ] Enable deck dropdown
+- [ ] Select first deck by default
+
+*** Stage 6: AnkiConnect Card Pushing
+- [ ] Construct addNote actions for each card
+- [ ] Send batch request to AnkiConnect
+- [ ] Handle success/failure responses
+- [ ] Update status messages
+
+** Technical debt and improvements
+
+*** From previous sessions (still relevant)
+- State shape validation (consider clojure.spec)
+- More sophisticated error handling patterns
+- Component organization as UI grows
+- Extract card component into separate function (repeated UI pattern)
+- Consider extracting column definitions for cleaner code
+
+*** New from session 3
+- Add keyboard shortcuts (Cmd+C for copy, etc.)
+- Consider adding card preview/edit before pushing
+- Add clipboard fallback dialog for manual copying (if JavaFX fails)
+- Consider timeout for status messages (auto-clear after 5 seconds)
+
+** Session 4 prep
+
+*** Quick start
+```bash
+cd /home/art/repos/ankimigo
+clojure -M -m ankimigo.main
+```
+
+*** Focus areas
+1. Start with Stage 3 (modal dialog for response pasting)
+2. Use cljfx modal dialog patterns
+3. Manage dialog state in :paste-dialog map
+4. Replace test card simulation with real response handling
+
+*** Remember
+- Keep using incremental approach with checkpoints
+- Test each dialog interaction thoroughly
+- Consider user experience (escape key, click outside to cancel)
+- Replace placeholder "Paste Response..." behavior completely
+
+*** Current working features to preserve
+- Real clipboard copying with validation and status messages
+- Three-column responsive layout
+- Prompt generation with concept interpolation
+- Window close handling
+- All existing button functionality (except "Paste Response..." which will be enhanced)
