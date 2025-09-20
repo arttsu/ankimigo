@@ -45,7 +45,7 @@
                                              (str/blank? (:back card)) "Missing or empty back"
                                              :else "Invalid card")))))
                    vec)})
-    (catch Exception e
+    (catch Exception _e
       {:success false
        :error "Failed to parse JSON. Please check the format."})))
 
@@ -344,7 +344,7 @@
   {:fx/type :label
    :text status-message})
 
-(defn root [{:keys [prompt-inputs status-message llm-response parsed-cards paste-dialog available-decks selected-deck]}]
+(defn root [{:keys [prompt-inputs status-message llm-response parsed-cards available-decks selected-deck]}]
   {:fx/type :stage
    :showing true
    :title "AnkiMigo - Tracer Bullet"
