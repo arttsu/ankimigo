@@ -36,14 +36,14 @@
                    (map #(let [card (hash-map :name (get % "name")
                                               :front (get % "front")
                                               :back (get % "back"))]
-                          (if (valid-card? card)
-                            (assoc card :valid true)
-                            (assoc card :valid false
-                                   :error (cond
-                                           (str/blank? (:name card)) "Missing or empty name"
-                                           (str/blank? (:front card)) "Missing or empty front"
-                                           (str/blank? (:back card)) "Missing or empty back"
-                                           :else "Invalid card")))))
+                           (if (valid-card? card)
+                             (assoc card :valid true)
+                             (assoc card :valid false
+                                    :error (cond
+                                             (str/blank? (:name card)) "Missing or empty name"
+                                             (str/blank? (:front card)) "Missing or empty front"
+                                             (str/blank? (:back card)) "Missing or empty back"
+                                             :else "Invalid card")))))
                    vec)})
     (catch Exception e
       {:success false
@@ -57,11 +57,11 @@
   []
   (try
     (let [response (http/post anki-connect-url
-                               {:body (json/write-value-as-string
-                                       {:action "deckNames"
-                                        :version 6})
-                                :headers {"Content-Type" "application/json"}
-                                :timeout 5000})
+                              {:body (json/write-value-as-string
+                                      {:action "deckNames"
+                                       :version 6})
+                               :headers {"Content-Type" "application/json"}
+                               :timeout 5000})
           body (json/read-value (:body response))]
       (if (nil? (get body "error"))
         {:success true
@@ -212,19 +212,19 @@
 
 (defn render-valid-card [idx card]
   (filterv some?
-    [{:fx/type :label
-      :text (str "Card " (inc idx) ": " (:name card))
-      :style "-fx-font-weight: bold;"}
-     {:fx/type :label
-      :text (str "Front: " (:front card))
-      :wrap-text true}
-     {:fx/type :label
-      :text (str "Back: " (:back card))
-      :wrap-text true}
-     (when (:anki-note-id card)
-       {:fx/type :label
-        :text (str "Anki ID: " (:anki-note-id card))
-        :style "-fx-text-fill: green; -fx-font-size: 11px;"})]))
+           [{:fx/type :label
+             :text (str "Card " (inc idx) ": " (:name card))
+             :style "-fx-font-weight: bold;"}
+            {:fx/type :label
+             :text (str "Front: " (:front card))
+             :wrap-text true}
+            {:fx/type :label
+             :text (str "Back: " (:back card))
+             :wrap-text true}
+            (when (:anki-note-id card)
+              {:fx/type :label
+               :text (str "Anki ID: " (:anki-note-id card))
+               :style "-fx-text-fill: green; -fx-font-size: 11px;"})]))
 
 (defn render-invalid-card [idx card]
   [{:fx/type :label
@@ -415,13 +415,13 @@
                                (println "Push result:" result)
                                (if (:success result)
                                  (let [invalid-cards (remove :valid cards)
-                                                       updated-cards (concat (:cards-with-ids result) invalid-cards)]
-                                                   (swap! *state #(-> %
-                                                                     (assoc :status-message
-                                                                            (str "Pushed " (:added result) " cards"
-                                                                                 (when (> (:duplicates result) 0)
-                                                                                   (str ", " (:duplicates result) " duplicates"))))
-                                                                     (assoc :parsed-cards updated-cards))))
+                                       updated-cards (concat (:cards-with-ids result) invalid-cards)]
+                                   (swap! *state #(-> %
+                                                      (assoc :status-message
+                                                             (str "Pushed " (:added result) " cards"
+                                                                  (when (> (:duplicates result) 0)
+                                                                    (str ", " (:duplicates result) " duplicates"))))
+                                                      (assoc :parsed-cards updated-cards))))
                                  (swap! *state assoc :status-message (:error result))))))))
     ::deck-selected (swap! *state assoc :selected-deck (:fx/event event))
     ::cancel-paste (do (println "Cancel paste clicked!")
