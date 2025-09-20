@@ -1,0 +1,221 @@
+* Tracer bullet session 7
+
+** What was accomplished
+
+*** Completed Stage 6: AnkiConnect Card Pushing
+- ✅ push-cards-to-anki function to send cards via AnkiConnect addNotes API
+- ✅ Batch processing with single HTTP request for multiple cards
+- ✅ "Push to Anki" button fully functional with real card data
+- ✅ Card validation - only valid cards sent to Anki
+- ✅ Duplicate handling - graceful response when cards already exist
+- ✅ Success/failure feedback with detailed status messages
+- ✅ Cards preserved with Anki note IDs instead of clearing
+- ✅ Button disable logic when no deck selected or no valid cards
+- ✅ Error handling for connection failures and API errors
+
+*** Key improvements implemented
+- *Card preservation*: Cards remain visible with green Anki note IDs after push
+- *Accurate feedback*: Fixed card count bug in status messages
+- *Code organization*: Decomposed large function into smaller, focused functions
+- *Error resilience*: Comprehensive validation and error handling
+- *UI responsiveness*: Button disabled when prerequisites not met
+- *User experience*: Clear indication of pushed cards vs pending cards
+
+*** Development approach used
+- *Incremental implementation with explicit CHECKPOINTs*: Each step verified before proceeding
+- *Small function decomposition*: Large functions broken into focused components
+- *Test-driven fixes*: Identified and fixed bugs through actual usage
+- *Progressive enhancement*: Core function -> handler -> UI integration -> polish
+
+** Current code structure
+
+*** src/ankimigo/main.clj
+- *State shape* (unchanged from session 6):
+  ```clojure
+  {:prompt-inputs {:concept ""}
+   :status-message "Ready."
+   :llm-response ""
+   :parsed-cards []          ; Now cards can have :anki-note-id field
+   :available-decks []
+   :selected-deck nil
+   :paste-dialog {:visible false :text ""}}
+  ```
+- *New AnkiConnect functions*:
+  - cards-to-anki-notes: Convert cards to AnkiConnect note format
+  - send-cards-to-anki: Make HTTP POST request with addNotes action
+  - process-anki-response: Parse response and create detailed results
+  - push-cards-to-anki: Main orchestrator function with error handling
+- *Updated UI components*:
+  - render-valid-card: Now shows green Anki note ID when present (with nil filtering)
+  - anki-controls: Push button disabled when no deck/valid cards
+- *Updated event handlers*:
+  - ::push-to-anki: Complete implementation with validation, push, and state updates
+
+*** Key technical patterns established
+- *Function decomposition*: Large functions split into single-responsibility components
+- *Card state management*: Cards updated with IDs rather than cleared
+- *Batch API usage*: Single addNotes request for efficiency
+- *Response parsing*: Proper handling of AnkiConnect result array (IDs and nulls)
+- *UI error prevention*: filterv some? to remove nil components
+- *Validation flow*: deck selected + valid cards present before push enabled
+
+** Test procedure for current state
+
+1. Run application: =clojure -M -m ankimigo.main=
+2. Verify three-column layout appears
+3. **Test full Stage 6 workflow**:
+   - Enter concept (e.g., "perro")
+   - Copy prompt, paste to LLM, get response
+   - Paste JSON response with cards
+   - Verify cards parsed and displayed
+   - Fetch decks and select target deck
+   - Verify Push button enables when deck+cards ready
+   - Click "Push to Anki" button
+   - Verify status shows accurate count (e.g., "Pushed 2 cards")
+   - Verify cards now show green "Anki ID: 1234567890" labels
+   - Verify cards remain visible (not cleared)
+4. **Test duplicate handling**:
+   - Generate same cards again
+   - Push to same deck
+   - Verify status shows "Pushed 0 cards, 2 duplicates"
+5. **Test validation**:
+   - Try pushing with no deck selected -> "Please select a deck first"
+   - Try pushing with no cards -> "No cards to push"
+   - Try pushing with only invalid cards -> "No valid cards to push"
+6. **Test button disable logic**:
+   - Verify Push button disabled when no deck selected
+   - Verify Push button disabled when no cards
+   - Verify Push button disabled when only invalid cards
+   - Verify Push button enabled when deck + valid cards present
+7. **Test error handling**:
+   - Stop Anki, try to push -> "Failed to push cards to Anki"
+   - Start Anki, retry -> should work
+
+** Technical fixes applied
+
+*** Card count bug fix
+- *Issue*: Status showed "Pushed 0 cards" despite successful pushes
+- *Root cause*: Inconsistent use of string vs keyword keys with json/keyword-keys-object-mapper
+- *Fix*: Changed `(get body "result")` to `(:result body)` and `(get body "error")` to `(:error body)`
+- *Files modified*: src/ankimigo/main.clj lines 104-108
+
+*** Card preservation instead of clearing
+- *Issue*: Cards disappeared after successful push, losing context for user
+- *Enhancement*: Cards remain visible with Anki note IDs for future reference/editing
+- *Implementation*: Added :cards-with-ids to result, updated handler to merge with invalid cards
+- *UI enhancement*: render-valid-card shows green Anki ID label when present
+- *Files modified*: src/ankimigo/main.clj lines 116-118, 402-409, 224-227
+
+*** Function decomposition
+- *Issue*: push-cards-to-anki was too large (40+ lines) and hard to test/maintain
+- *Solution*: Split into 4 focused functions:
+  - `cards-to-anki-notes` (9 lines): Format conversion only
+  - `send-cards-to-anki` (8 lines): HTTP request only
+  - `process-anki-response` (16 lines): Response parsing only
+  - `push-cards-to-anki` (10 lines): Main orchestrator
+- *Benefits*: Easier testing, clearer responsibilities, better maintainability
+- *Files modified*: src/ankimigo/main.clj lines 76-131
+
+*** UI nil component fix
+- *Issue*: `java.lang.IllegalArgumentException: No implementation of method: :create`
+- *Root cause*: `when` clause returning nil when no :anki-note-id present
+- *Fix*: Added `(filterv some? [...])` to remove nil components
+- *Files modified*: src/ankimigo/main.clj lines 214, 227
+
+** References
+
+*** Tracer bullet specification
+- [[file:2025-09-18-0832-tracer-bullet-requirements.md][Requirements document]]
+- [[file:2025-09-18-0900-tracer-bullet-implementation-spec.md][Implementation stages]]
+- [[file:2025-09-18-1031-tracer-bullet-session-1.org][Session 1 notes]]
+- [[file:2025-09-18-1625-tracer-bullet-session-2.org][Session 2 notes]]
+- [[file:2025-09-18-1815-tracer-bullet-session-3.org][Session 3 notes]]
+- [[file:2025-09-18-1844-tracer-bullet-session-4.org][Session 4 notes]]
+- [[file:2025-09-19-2030-tracer-bullet-session-5.org][Session 5 notes]]
+- [[file:2025-09-20-0957-tracer-bullet-session-6.org][Session 6 notes]]
+
+*** Code files modified
+- =src/ankimigo/main.clj= - Stage 6 AnkiConnect card pushing completed
+- =src/ankimigo/prompt.clj= - Unchanged from session 1
+- =deps.edn= - Unchanged (hato already added in earlier session)
+
+** Tracer bullet completion status
+
+*** ✅ COMPLETED STAGES
+1. **Stage 1**: Basic UI layout with three columns ✅
+2. **Stage 2**: Prompt generation with concept interpolation ✅
+3. **Stage 3**: LLM response handling with modal dialog ✅
+4. **Stage 4**: JSON parsing with card validation ✅
+5. **Stage 5**: AnkiConnect deck fetching and selection ✅
+6. **Stage 6**: AnkiConnect card pushing with ID tracking ✅
+
+*** 🎉 TRACER BULLET COMPLETE
+The full end-to-end workflow is now functional:
+**Concept → Prompt → LLM Response → Parsed Cards → Deck Selection → Push to Anki**
+
+All core requirements from the tracer bullet specification have been implemented:
+- User can input a concept
+- System generates appropriate prompt
+- User gets LLM response and pastes it back
+- Cards are parsed and validated
+- User selects target Anki deck
+- Cards are pushed to Anki with full feedback
+- Cards remain visible with Anki IDs for tracking
+
+## Next steps (beyond tracer bullet scope)
+
+*** Potential enhancements for future sessions
+- *Card editing*: Allow editing cards before/after push
+- *Deck management*: Create new decks from within app
+- *Model selection*: Support different Anki note models beyond "Basic"
+- *Tag management*: Allow custom tags beyond "ankimigo"
+- *Batch operations*: Support multiple concepts in single session
+- *Configuration*: Persist user preferences (last deck, model, etc.)
+- *Export/Import*: Save/load card sets as JSON files
+- *Undo functionality*: Reverse pushed cards if needed
+
+*** Technical debt to address
+- Add clojure.spec for state validation
+- Implement comprehensive test suite
+- Add keyboard shortcuts for common operations
+- Consider timeout for auto-clearing status messages
+- Add progress indicators for long operations
+- Improve error messages with actionable suggestions
+
+** Session 8 prep (if continuing beyond tracer bullet)
+
+*** Quick start
+```bash
+cd /home/art/repos/ankimigo
+clojure -M -m ankimigo.main
+```
+
+*** Current working features to preserve
+- Complete end-to-end workflow from concept to Anki
+- JSON parsing with validation and error display
+- Invalid cards shown with pink background
+- Modal dialog for pasting LLM responses
+- Clipboard copying with validation
+- Three-column responsive layout
+- Deck fetching and selection from AnkiConnect
+- Card pushing with ID tracking and preservation
+- Comprehensive error handling for all operations
+- Button state management and validation
+- Status messaging for user feedback
+
+*** Code quality established
+- Small, focused functions with single responsibilities
+- Consistent error handling patterns
+- Comprehensive input validation
+- Clean separation of concerns (UI, state, API)
+- Descriptive function and variable names
+- Proper documentation strings
+
+*** Testing approach validated
+- Incremental development with explicit checkpoints
+- Real integration testing with actual AnkiConnect
+- Edge case validation (duplicates, failures, missing data)
+- User workflow testing end-to-end
+- Error condition testing (network failures, invalid input)
+
+The tracer bullet implementation is now complete and serves as a solid foundation for any future enhancements to the AnkiMigo application.
