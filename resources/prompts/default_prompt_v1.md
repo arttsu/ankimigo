@@ -36,6 +36,7 @@ Generate a concise, structured set of 3-6 personalized, memorable Anki cards for
     *   **Concise:** Each example should be a **single sentence**. Do not use paragraphs.
     *   **A2-Level Vocabulary:** Use vocabulary appropriate for an A2 learner. You may introduce ONE new, useful word per sentence, but the core must be simple.
     *   **Vary the Grammatical Person:** In the example sentences (Simple Usage, Memorable Usage, etc.), you MUST use a variety of grammatical persons (`yo`, `tú`, `ella`, `nosotros`, `ellos`). Do not use the same person in every sentence.
+    *   **Vary the Tense (when appropriate):** For the 'Memorable Usage' and other example cards, try to use a variety of tenses like the preterite, imperfect, and future. Keep the 'Simple Usage' card in the present tense to establish a clear baseline.
     *   **Vary the Gender:** For gendered nouns (like amigo/amiga), ensure the example sentences include both masculine and feminine forms.
 
 3.  **Card Content Details:**
