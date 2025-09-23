@@ -1,9 +1,9 @@
 (ns ankimigo.main
   (:require [cljfx.api :as fx]
             [ankimigo.prompt :as prompt]
+            [ankimigo.anki :as anki]
             [clojure.string :as str]
-            [jsonista.core :as json]
-            [hato.client :as http])
+            [jsonista.core :as json])
   (:import [javafx.scene.input Clipboard ClipboardContent])
   (:gen-class))
 
@@ -49,86 +49,6 @@
       {:success false
        :error "Failed to parse JSON. Please check the format."})))
 
-;; AnkiConnect helper functions
-(def anki-connect-url "http://localhost:8765")
-
-(defn fetch-deck-names
-  "Fetches available deck names from AnkiConnect"
-  []
-  (try
-    (let [response (http/post anki-connect-url
-                              {:body (json/write-value-as-string
-                                      {:action "deckNames"
-                                       :version 6})
-                               :headers {"Content-Type" "application/json"}
-                               :timeout 5000})
-          body (json/read-value (:body response))]
-      (if (nil? (get body "error"))
-        {:success true
-         :decks (get body "result" [])}
-        {:success false
-         :error (str "AnkiConnect error: " (get body "error"))}))
-    (catch Exception e
-      {:success false
-       :error (str "Failed to connect to Anki. Is Anki running with AnkiConnect? "
-                   (.getMessage e))})))
-
-(defn cards-to-anki-notes
-  "Convert cards to AnkiConnect note format"
-  [cards deck-name]
-  (mapv (fn [card]
-          {:deckName deck-name
-           :modelName "Basic"
-           :fields {:Front (:front card)
-                    :Back (:back card)}
-           :tags ["ankimigo"]})
-        cards))
-
-(defn send-cards-to-anki
-  "Send notes to AnkiConnect API"
-  [notes]
-  (hato.client/post anki-connect-url
-                    {:content-type :json
-                     :accept :json
-                     :body (json/write-value-as-string
-                            {:action "addNotes"
-                             :version 6
-                             :params {:notes notes}})
-                     :timeout 5000}))
-
-(defn process-anki-response
-  "Process AnkiConnect response and create result"
-  [response valid-cards]
-  (let [body (json/read-value (:body response) json/keyword-keys-object-mapper)]
-    (if (:error body)
-      {:success false
-       :error (str "AnkiConnect error: " (:error body))}
-      (let [results (:result body)
-            successful (remove nil? results)
-            failed (filter nil? results)]
-        {:success true
-         :total (count valid-cards)
-         :added (count successful)
-         :duplicates (count failed)
-         :note-ids successful
-         :cards-with-ids (mapv (fn [card note-id]
-                                 (assoc card :anki-note-id note-id))
-                               valid-cards results)}))))
-
-(defn push-cards-to-anki
-  "Push validated cards to Anki via AnkiConnect addNotes API"
-  [cards deck-name]
-  (try
-    (let [valid-cards (filter :valid cards)]
-      (if (empty? valid-cards)
-        {:success false
-         :error "No valid cards to push"}
-        (let [notes (cards-to-anki-notes valid-cards deck-name)
-              response (send-cards-to-anki notes)]
-          (process-anki-response response valid-cards))))
-    (catch Exception e
-      {:success false
-       :error (str "Failed to push cards to Anki: " (.getMessage e))})))
 
 ;; Clipboard helper functions
 (defn copy-to-clipboard!
@@ -153,6 +73,8 @@
    :parsed-cards []
    :available-decks []
    :selected-deck nil
+   :fetching-decks? false
+   :pushing-cards? false
    :paste-dialog {:visible false
                   :text ""}})
 
@@ -273,30 +195,33 @@
                  :text "No cards parsed yet"
                  :style "-fx-text-fill: gray;"})]})
 
-(defn anki-controls [available-decks selected-deck parsed-cards]
+(defn anki-controls [available-decks selected-deck parsed-cards fetching-decks? pushing-cards?]
   [{:fx/type :separator}
    {:fx/type :label
     :text "Deck:"}
    {:fx/type :combo-box
-    :disable (empty? available-decks)
+    :disable (or (empty? available-decks) fetching-decks?)
     :items available-decks
     :value selected-deck
     :prompt-text "Select deck..."
     :max-width Double/MAX_VALUE
     :on-value-changed {:event/type ::deck-selected}}
    {:fx/type :button
-    :text "Fetch Decks"
+    :text (if fetching-decks? "Fetching..." "Fetch Decks")
     :max-width Double/MAX_VALUE
+    :disable fetching-decks?
     :on-action {:event/type ::fetch-decks}}
    {:fx/type :button
-    :text "Push to Anki"
+    :text (if pushing-cards? "Pushing..." "Push to Anki")
     :max-width Double/MAX_VALUE
     :disable (or (nil? selected-deck)
                  (empty? parsed-cards)
-                 (empty? (filter :valid parsed-cards)))
+                 (empty? (filter :valid parsed-cards))
+                 fetching-decks?
+                 pushing-cards?)
     :on-action {:event/type ::push-to-anki}}])
 
-(defn anki-column [parsed-cards available-decks selected-deck]
+(defn anki-column [parsed-cards available-decks selected-deck fetching-decks? pushing-cards?]
   {:fx/type :v-box
    :spacing 10
    :h-box/hgrow :always
@@ -307,7 +232,7 @@
                        :style "-fx-font-weight: bold; -fx-font-size: 14px;"}
                       {:fx/type :separator}
                       (card-list parsed-cards)]
-                     (anki-controls available-decks selected-deck parsed-cards))})
+                     (anki-controls available-decks selected-deck parsed-cards fetching-decks? pushing-cards?))})
 
 (defn paste-response-dialog [paste-dialog]
   {:fx/type :stage
@@ -344,7 +269,8 @@
   {:fx/type :label
    :text status-message})
 
-(defn root [{:keys [prompt-inputs status-message llm-response parsed-cards available-decks selected-deck]}]
+(defn root [{:keys [prompt-inputs status-message llm-response parsed-cards available-decks selected-deck
+                     fetching-decks? pushing-cards?]}]
   {:fx/type :stage
    :showing true
    :title "AnkiMigo - Tracer Bullet"
@@ -361,7 +287,8 @@
                               :v-box/vgrow :always
                               :children [(input-column prompt-inputs)
                                          (output-column prompt-inputs llm-response)
-                                         (anki-column parsed-cards available-decks selected-deck)]}
+                                         (anki-column parsed-cards available-decks selected-deck
+                                                      fetching-decks? pushing-cards?)]}
                              ;; Status bar
                              {:fx/type :separator}
                              (status-bar status-message)]}}})
@@ -385,14 +312,16 @@
     ::clear (do (println "Clear button clicked!")
                 (swap! *state assoc :llm-response "" :parsed-cards []))
     ::fetch-decks (do (println "Fetch Decks button clicked!")
-                      (swap! *state assoc :status-message "Fetching decks from Anki...")
-                      (let [result (fetch-deck-names)]
-                        (if (:success result)
-                          (swap! *state #(-> %
-                                             (assoc :available-decks (:decks result)
-                                                    :selected-deck (first (:decks result))
-                                                    :status-message (str "Found " (count (:decks result)) " decks"))))
-                          (swap! *state assoc :status-message (:error result)))))
+                      (swap! *state assoc :status-message "Fetching decks from Anki..."
+                                          :fetching-decks? true)
+                      ;; Run async operation
+                      (future
+                        (try
+                          (let [result (anki/fetch-deck-names)]
+                            (map-event-handler {:event/type ::fetch-decks-result :result result}))
+                          (catch Exception e
+                            (map-event-handler {:event/type ::fetch-decks-error :error (.getMessage e)}))))
+                      nil)
     ::push-to-anki (do (println "Push to Anki button clicked!")
                        (let [current-state @*state
                              cards (:parsed-cards current-state)
@@ -410,19 +339,19 @@
 
                            :else
                            (do
-                             (swap! *state assoc :status-message "Pushing cards to Anki...")
-                             (let [result (push-cards-to-anki cards deck-name)]
-                               (println "Push result:" result)
-                               (if (:success result)
-                                 (let [invalid-cards (remove :valid cards)
-                                       updated-cards (concat (:cards-with-ids result) invalid-cards)]
-                                   (swap! *state #(-> %
-                                                      (assoc :status-message
-                                                             (str "Pushed " (:added result) " cards"
-                                                                  (when (> (:duplicates result) 0)
-                                                                    (str ", " (:duplicates result) " duplicates"))))
-                                                      (assoc :parsed-cards updated-cards))))
-                                 (swap! *state assoc :status-message (:error result))))))))
+                             (swap! *state assoc :status-message "Pushing cards to Anki..."
+                                                 :pushing-cards? true)
+                             ;; Run async operation
+                             (future
+                               (try
+                                 (let [result (anki/push-cards-to-anki cards deck-name)]
+                                   (map-event-handler {:event/type ::push-to-anki-result
+                                                       :result result
+                                                       :cards cards}))
+                                 (catch Exception e
+                                   (map-event-handler {:event/type ::push-to-anki-error
+                                                       :error (.getMessage e)}))))
+                             nil))))
     ::deck-selected (swap! *state assoc :selected-deck (:fx/event event))
     ::cancel-paste (do (println "Cancel paste clicked!")
                        (swap! *state #(-> %
@@ -447,15 +376,49 @@
                                                (assoc-in [:paste-dialog :visible] false)
                                                (assoc-in [:paste-dialog :text] ""))))))
     ::paste-dialog-text-changed (swap! *state assoc-in [:paste-dialog :text] (:fx/event event))
+    ::fetch-decks-result (let [result (:result event)]
+                           (if (:success result)
+                             (swap! *state #(-> %
+                                                (assoc :available-decks (:decks result)
+                                                       :selected-deck (first (:decks result))
+                                                       :status-message (str "Found " (count (:decks result)) " decks")
+                                                       :fetching-decks? false)))
+                             (swap! *state #(-> %
+                                                (assoc :status-message (:error result)
+                                                       :fetching-decks? false)))))
+    ::fetch-decks-error (swap! *state #(-> %
+                                            (assoc :status-message (str "Error fetching decks: " (:error event))
+                                                   :fetching-decks? false)))
+    ::push-to-anki-result (let [result (:result event)
+                                cards (:cards event)]
+                            (println "Push result:" result)
+                            (if (:success result)
+                              (let [invalid-cards (remove :valid cards)
+                                    updated-cards (concat (:cards-with-ids result) invalid-cards)]
+                                (swap! *state #(-> %
+                                                   (assoc :status-message
+                                                          (str "Pushed " (:added result) " cards"
+                                                               (when (> (:duplicates result) 0)
+                                                                 (str ", " (:duplicates result) " duplicates")))
+                                                          :pushing-cards? false
+                                                          :parsed-cards updated-cards))))
+                              (swap! *state #(-> %
+                                                 (assoc :status-message (:error result)
+                                                        :pushing-cards? false)))))
+    ::push-to-anki-error (swap! *state #(-> %
+                                             (assoc :status-message (str "Error pushing cards: " (:error event))
+                                                    :pushing-cards? false)))
     (println "Unhandled event:" (:event/type event))))
 
 (defn -main [& _args]
   (println "Starting AnkiMigo Tracer Bullet")
+
   ;; Main window renderer
   (fx/mount-renderer *state
                      (fx/create-renderer
                       :middleware (fx/wrap-map-desc assoc :fx/type root)
                       :opts {:fx.opt/map-event-handler map-event-handler}))
+
   ;; Dialog renderer
   (fx/mount-renderer *state
                      (fx/create-renderer

@@ -74,3 +74,33 @@ These blocking calls freeze the JavaFX UI thread during network operations.
 **Recommendation:** Start with simple approach (disable buttons + status text) since it's minimal overhead and gives immediate user feedback.
 
 ## Implementation
+
+### Completed Steps
+
+1. **Extracted AnkiConnect operations** to `src/ankimigo/anki.clj`
+   - Moved all Anki-related functions to separate namespace
+   - Cleaner separation of concerns
+
+2. **Created effects handler** in `src/ankimigo/effects.clj`
+   - Simple dispatch-effect function for async operations
+   - Foundation for future effects expansion
+
+3. **Added loading states** to app state
+   - `:fetching-decks?` and `:pushing-cards?` flags
+   - Used for UI feedback
+
+4. **Converted event handlers** to async
+   - `::fetch-decks` runs in future, dispatches result events
+   - `::push-to-anki` runs in future, dispatches result events
+   - Added result/error handlers for both operations
+
+5. **Updated UI with loading indicators**
+   - Buttons show "Fetching..."/"Pushing..." during operations
+   - Buttons disabled during async operations
+   - Status messages provide feedback
+
+### Result
+- UI remains fully responsive during network operations
+- Clear visual feedback for user actions
+- No blocking of JavaFX thread
+- Clean separation between UI events and async operations
