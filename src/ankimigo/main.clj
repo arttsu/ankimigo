@@ -2,9 +2,9 @@
   (:require [cljfx.api :as fx]
             [ankimigo.prompt :as prompt]
             [ankimigo.anki :as anki]
+            [ankimigo.effects :as effects]
             [clojure.string :as str]
             [jsonista.core :as json])
-  (:import [javafx.scene.input Clipboard ClipboardContent])
   (:gen-class))
 
 ;; State update helpers
@@ -49,20 +49,6 @@
       {:success false
        :error "Failed to parse JSON. Please check the format."})))
 
-
-;; Clipboard helper functions
-(defn copy-to-clipboard!
-  "Copy text to system clipboard using JavaFX"
-  [text]
-  (try
-    (let [clipboard (Clipboard/getSystemClipboard)
-          content (ClipboardContent.)]
-      (.putString content text)
-      (.setContent clipboard content)
-      true)
-    (catch Exception e
-      (println "Error copying to clipboard:" (.getMessage e))
-      false)))
 
 (defn init-state []
   {:prompt-inputs {:concept ""}
@@ -269,6 +255,141 @@
   {:fx/type :label
    :text status-message})
 
+;; Pure event handler - returns {:state new-state} or {:state new-state :effects [...]}
+(defn handle-event [state event]
+  (case (:event/type event)
+    ;; Simple synchronous events first
+    ::concept-changed
+    {:state (update-prompt-input state :concept (:fx/event event))}
+
+    ::deck-selected
+    {:state (assoc state :selected-deck (:fx/event event))}
+
+    ::clear
+    {:state (assoc state :llm-response "" :parsed-cards [])}
+
+    ::paste-response
+    {:state (assoc-in state [:paste-dialog :visible] true)}
+
+    ::cancel-paste
+    {:state (-> state
+                (assoc-in [:paste-dialog :visible] false)
+                (assoc-in [:paste-dialog :text] ""))}
+
+    ::paste-dialog-text-changed
+    {:state (assoc-in state [:paste-dialog :text] (:fx/event event))}
+
+    ;; Async events with effects
+    ::fetch-decks
+    {:state (assoc state
+                   :status-message "Fetching decks from Anki..."
+                   :fetching-decks? true)
+     :effects [{:type :http
+                :operation anki/fetch-deck-names
+                :on-result {:event/type ::fetch-decks-result}
+                :on-error {:event/type ::fetch-decks-error}}]}
+
+    ::fetch-decks-result
+    (let [result (:result event)]
+      (if (:success result)
+        {:state (-> state
+                    (assoc :available-decks (:decks result)
+                           :selected-deck (first (:decks result))
+                           :status-message (str "Found " (count (:decks result)) " decks")
+                           :fetching-decks? false))}
+        {:state (-> state
+                    (assoc :status-message (:error result)
+                           :fetching-decks? false))}))
+
+    ::fetch-decks-error
+    {:state (-> state
+                (assoc :status-message (str "Error fetching decks: " (:error event))
+                       :fetching-decks? false))}
+
+    ::push-to-anki
+    (let [cards (:parsed-cards state)
+          deck-name (:selected-deck state)
+          valid-cards (filter :valid cards)]
+      (cond
+        (nil? deck-name)
+        {:state (assoc state :status-message "Please select a deck first")}
+
+        (empty? cards)
+        {:state (assoc state :status-message "No cards to push")}
+
+        (empty? valid-cards)
+        {:state (assoc state :status-message "No valid cards to push")}
+
+        :else
+        {:state (assoc state
+                       :status-message "Pushing cards to Anki..."
+                       :pushing-cards? true)
+         :effects [{:type :http
+                    :operation #(anki/push-cards-to-anki cards deck-name)
+                    :on-result {:event/type ::push-to-anki-result
+                                :cards cards}
+                    :on-error {:event/type ::push-to-anki-error}}]}))
+
+    ::push-to-anki-result
+    (let [result (:result event)
+          cards (:cards event)]
+      (if (:success result)
+        (let [invalid-cards (remove :valid cards)
+              updated-cards (concat (:cards-with-ids result) invalid-cards)]
+          {:state (-> state
+                      (assoc :status-message
+                             (str "Pushed " (:added result) " cards"
+                                  (when (> (:duplicates result) 0)
+                                    (str ", " (:duplicates result) " duplicates")))
+                             :pushing-cards? false
+                             :parsed-cards updated-cards))})
+        {:state (-> state
+                    (assoc :status-message (:error result)
+                           :pushing-cards? false))}))
+
+    ::push-to-anki-error
+    {:state (-> state
+                (assoc :status-message (str "Error pushing cards: " (:error event))
+                       :pushing-cards? false))}
+
+    ::copy-prompt
+    (let [concept (get-in state [:prompt-inputs :concept] "")]
+      (if (str/blank? concept)
+        {:state (assoc state :status-message "Please enter a concept first!")}
+        (let [prompt-text (prompt/render-prompt (:prompt-inputs state))]
+          {:effects [{:type :clipboard
+                      :text prompt-text
+                      :on-success {:event/type ::copy-prompt-success}
+                      :on-error {:event/type ::copy-prompt-error}}]})))
+
+    ::copy-prompt-success
+    {:state (assoc state :status-message "Prompt copied to clipboard!")}
+
+    ::copy-prompt-error
+    {:state (assoc state :status-message "Failed to copy prompt to clipboard!")}
+
+    ::confirm-paste
+    (let [pasted-text (get-in state [:paste-dialog :text] "")
+          parse-result (parse-json-response pasted-text)]
+      (if (:success parse-result)
+        {:state (-> state
+                    (assoc :llm-response pasted-text
+                           :parsed-cards (:cards parse-result)
+                           :status-message (str "Successfully parsed "
+                                                (count (:cards parse-result))
+                                                " cards"))
+                    (assoc-in [:paste-dialog :visible] false)
+                    (assoc-in [:paste-dialog :text] ""))}
+        {:state (-> state
+                    (assoc :llm-response ""
+                           :parsed-cards []
+                           :status-message (str "JSON parsing error: " (:error parse-result)))
+                    (assoc-in [:paste-dialog :visible] false)
+                    (assoc-in [:paste-dialog :text] ""))}))
+
+    ;; Return unchanged state for unhandled events (for now)
+    {:state state}))
+
 (defn root [{:keys [prompt-inputs status-message llm-response parsed-cards available-decks selected-deck
                      fetching-decks? pushing-cards?]}]
   {:fx/type :stage
@@ -294,121 +415,22 @@
                              (status-bar status-message)]}}})
 
 (defn map-event-handler [event]
-  (case (:event/type event)
-    ::concept-changed (swap! *state update-prompt-input :concept (:fx/event event))
-    ::copy-prompt (let [concept (get-in @*state [:prompt-inputs :concept] "")]
-                    (println "Copy Prompt button clicked!")
-                    (if (str/blank? concept)
-                      (do (println "Please enter a concept first!")
-                          (swap! *state assoc :status-message "Please enter a concept first!"))
-                      (let [prompt-text (prompt/render-prompt (:prompt-inputs @*state))]
-                        (if (copy-to-clipboard! prompt-text)
-                          (do (println "Successfully copied prompt to clipboard!")
-                              (swap! *state assoc :status-message "Prompt copied to clipboard!"))
-                          (do (println "Failed to copy prompt to clipboard!")
-                              (swap! *state assoc :status-message "Failed to copy prompt to clipboard!"))))))
-    ::paste-response (do (println "Paste Response button clicked!")
-                         (swap! *state assoc-in [:paste-dialog :visible] true))
-    ::clear (do (println "Clear button clicked!")
-                (swap! *state assoc :llm-response "" :parsed-cards []))
-    ::fetch-decks (do (println "Fetch Decks button clicked!")
-                      (swap! *state assoc :status-message "Fetching decks from Anki..."
-                                          :fetching-decks? true)
-                      ;; Run async operation
-                      (future
-                        (try
-                          (let [result (anki/fetch-deck-names)]
-                            (map-event-handler {:event/type ::fetch-decks-result :result result}))
-                          (catch Exception e
-                            (map-event-handler {:event/type ::fetch-decks-error :error (.getMessage e)}))))
-                      nil)
-    ::push-to-anki (do (println "Push to Anki button clicked!")
-                       (let [current-state @*state
-                             cards (:parsed-cards current-state)
-                             deck-name (:selected-deck current-state)
-                             valid-cards (filter :valid cards)]
-                         (cond
-                           (nil? deck-name)
-                           (swap! *state assoc :status-message "Please select a deck first")
+  ;; Debug logging
+  (println "Event:" (:event/type event))
 
-                           (empty? cards)
-                           (swap! *state assoc :status-message "No cards to push")
+  ;; All events now go through pure handler
+  (let [result (handle-event @*state event)]
+    ;; Log if there are effects
+    (when (:effects result)
+      (println "  Effects:" (map :type (:effects result))))
 
-                           (empty? valid-cards)
-                           (swap! *state assoc :status-message "No valid cards to push")
+    ;; Update state
+    (when-let [new-state (:state result)]
+      (reset! *state new-state))
 
-                           :else
-                           (do
-                             (swap! *state assoc :status-message "Pushing cards to Anki..."
-                                                 :pushing-cards? true)
-                             ;; Run async operation
-                             (future
-                               (try
-                                 (let [result (anki/push-cards-to-anki cards deck-name)]
-                                   (map-event-handler {:event/type ::push-to-anki-result
-                                                       :result result
-                                                       :cards cards}))
-                                 (catch Exception e
-                                   (map-event-handler {:event/type ::push-to-anki-error
-                                                       :error (.getMessage e)}))))
-                             nil))))
-    ::deck-selected (swap! *state assoc :selected-deck (:fx/event event))
-    ::cancel-paste (do (println "Cancel paste clicked!")
-                       (swap! *state #(-> %
-                                          (assoc-in [:paste-dialog :visible] false)
-                                          (assoc-in [:paste-dialog :text] ""))))
-    ::confirm-paste (do (println "Confirm paste clicked!")
-                        (let [pasted-text (get-in @*state [:paste-dialog :text] "")
-                              parse-result (parse-json-response pasted-text)]
-                          (if (:success parse-result)
-                            (swap! *state #(-> %
-                                               (assoc :llm-response pasted-text
-                                                      :parsed-cards (:cards parse-result)
-                                                      :status-message (str "Successfully parsed "
-                                                                           (count (:cards parse-result))
-                                                                           " cards"))
-                                               (assoc-in [:paste-dialog :visible] false)
-                                               (assoc-in [:paste-dialog :text] "")))
-                            (swap! *state #(-> %
-                                               (assoc :llm-response ""
-                                                      :parsed-cards []
-                                                      :status-message (str "JSON parsing error: " (:error parse-result)))
-                                               (assoc-in [:paste-dialog :visible] false)
-                                               (assoc-in [:paste-dialog :text] ""))))))
-    ::paste-dialog-text-changed (swap! *state assoc-in [:paste-dialog :text] (:fx/event event))
-    ::fetch-decks-result (let [result (:result event)]
-                           (if (:success result)
-                             (swap! *state #(-> %
-                                                (assoc :available-decks (:decks result)
-                                                       :selected-deck (first (:decks result))
-                                                       :status-message (str "Found " (count (:decks result)) " decks")
-                                                       :fetching-decks? false)))
-                             (swap! *state #(-> %
-                                                (assoc :status-message (:error result)
-                                                       :fetching-decks? false)))))
-    ::fetch-decks-error (swap! *state #(-> %
-                                            (assoc :status-message (str "Error fetching decks: " (:error event))
-                                                   :fetching-decks? false)))
-    ::push-to-anki-result (let [result (:result event)
-                                cards (:cards event)]
-                            (println "Push result:" result)
-                            (if (:success result)
-                              (let [invalid-cards (remove :valid cards)
-                                    updated-cards (concat (:cards-with-ids result) invalid-cards)]
-                                (swap! *state #(-> %
-                                                   (assoc :status-message
-                                                          (str "Pushed " (:added result) " cards"
-                                                               (when (> (:duplicates result) 0)
-                                                                 (str ", " (:duplicates result) " duplicates")))
-                                                          :pushing-cards? false
-                                                          :parsed-cards updated-cards))))
-                              (swap! *state #(-> %
-                                                 (assoc :status-message (:error result)
-                                                        :pushing-cards? false)))))
-    ::push-to-anki-error (swap! *state #(-> %
-                                             (assoc :status-message (str "Error pushing cards: " (:error event))
-                                                    :pushing-cards? false)))
-    (println "Unhandled event:" (:event/type event))))
+    ;; Handle any effects
+    (when-let [effects (:effects result)]
+      (effects/perform-effects effects map-event-handler))))
 
 (defn -main [& _args]
   (println "Starting AnkiMigo Tracer Bullet")
