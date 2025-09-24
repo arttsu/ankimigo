@@ -14,13 +14,6 @@
       (catch Exception e
         (dispatch! (assoc on-error :error (.getMessage e)))))))
 
-(defn dispatch-later-effect
-  "Dispatch an event after a delay"
-  [{:keys [delay-ms event]} dispatch!]
-  (future
-    (Thread/sleep delay-ms)
-    (dispatch! event)))
-
 (defn clipboard-effect
   "Copy text to clipboard"
   [{:keys [text on-success on-error]} dispatch!]
@@ -38,7 +31,6 @@
 ;; Effect registry
 (def effects
   {:http http-effect
-   :dispatch-later dispatch-later-effect
    :clipboard clipboard-effect})
 
 (defn perform-effects

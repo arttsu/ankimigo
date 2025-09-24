@@ -1,26 +1,29 @@
 (ns ankimigo.anki
-  (:require [jsonista.core :as json]
-            [hato.client :as http]))
-
-;; AnkiConnect helper functions
-(def anki-connect-url "http://localhost:8765")
+  "Business logic for Anki integration"
+  (:require [ankimigo.anki-api :as api]
+            [clojure.string :as str])
+  (:import [java.net ConnectException SocketTimeoutException]
+           [java.io IOException]))
 
 (defn fetch-deck-names
   "Fetches available deck names from AnkiConnect"
   []
   (try
-    (let [response (http/post anki-connect-url
-                              {:body (json/write-value-as-string
-                                      {:action "deckNames"
-                                       :version 6})
-                               :headers {"Content-Type" "application/json"}
-                               :timeout 5000})
-          body (json/read-value (:body response))]
-      (if (nil? (get body "error"))
-        {:success true
-         :decks (get body "result" [])}
+    (let [body (api/fetch-deck-names)]
+      (if-let [error (get body "error")]
         {:success false
-         :error (str "AnkiConnect error: " (get body "error"))}))
+         :error (str "AnkiConnect error: " error)}
+        {:success true
+         :result {:decks (get body "result" [])}}))
+    (catch ConnectException e
+      {:success false
+       :error "Cannot connect to Anki. Please make sure Anki is running with AnkiConnect add-on installed."})
+    (catch SocketTimeoutException e
+      {:success false
+       :error "Request timed out. Anki may be busy or unresponsive."})
+    (catch IOException e
+      {:success false
+       :error (str "Network error connecting to Anki: " (.getMessage e))})
     (catch Exception e
       {:success false
        :error (str "Failed to connect to Anki. Is Anki running with AnkiConnect? "
@@ -37,22 +40,11 @@
            :tags ["ankimigo"]})
         cards))
 
-(defn send-cards-to-anki
-  "Send notes to AnkiConnect API"
-  [notes]
-  (http/post anki-connect-url
-             {:content-type :json
-              :accept :json
-              :body (json/write-value-as-string
-                     {:action "addNotes"
-                      :version 6
-                      :params {:notes notes}})
-              :timeout 5000}))
 
-(defn process-anki-response
-  "Process AnkiConnect response and create result"
-  [response valid-cards]
-  (let [body (json/read-value (:body response) json/keyword-keys-object-mapper)]
+(defn process-add-notes-response
+  "Process AnkiConnect addNotes response and create result"
+  [body valid-cards]
+  (let []
     (if (:error body)
       {:success false
        :error (str "AnkiConnect error: " (:error body))}
@@ -60,13 +52,13 @@
             successful (remove nil? results)
             failed (filter nil? results)]
         {:success true
-         :total (count valid-cards)
-         :added (count successful)
-         :duplicates (count failed)
-         :note-ids successful
-         :cards-with-ids (mapv (fn [card note-id]
-                                 (assoc card :anki-note-id note-id))
-                               valid-cards results)}))))
+         :result {:total (count valid-cards)
+                  :added (count successful)
+                  :duplicates (count failed)
+                  :note-ids successful
+                  :cards-with-ids (mapv (fn [card note-id]
+                                          (assoc card :anki-note-id note-id))
+                                        valid-cards results)}}))))
 
 (defn push-cards-to-anki
   "Push validated cards to Anki via AnkiConnect addNotes API"
@@ -77,8 +69,17 @@
         {:success false
          :error "No valid cards to push"}
         (let [notes (cards-to-anki-notes valid-cards deck-name)
-              response (send-cards-to-anki notes)]
-          (process-anki-response response valid-cards))))
+              response-body (api/add-notes notes)]
+          (process-add-notes-response response-body valid-cards))))
+    (catch ConnectException e
+      {:success false
+       :error "Cannot connect to Anki. Please make sure Anki is running with AnkiConnect add-on installed."})
+    (catch SocketTimeoutException e
+      {:success false
+       :error "Request timed out. Anki may be busy or unresponsive."})
+    (catch IOException e
+      {:success false
+       :error (str "Network error pushing cards to Anki: " (.getMessage e))})
     (catch Exception e
       {:success false
        :error (str "Failed to push cards to Anki: " (.getMessage e))})))

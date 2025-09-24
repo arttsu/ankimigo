@@ -293,9 +293,9 @@
     (let [result (:result event)]
       (if (:success result)
         {:state (-> state
-                    (assoc :available-decks (:decks result)
-                           :selected-deck (first (:decks result))
-                           :status-message (str "Found " (count (:decks result)) " decks")
+                    (assoc :available-decks (get-in result [:result :decks])
+                           :selected-deck (first (get-in result [:result :decks]))
+                           :status-message (str "Found " (count (get-in result [:result :decks])) " decks")
                            :fetching-decks? false))}
         {:state (-> state
                     (assoc :status-message (:error result)
@@ -335,12 +335,12 @@
           cards (:cards event)]
       (if (:success result)
         (let [invalid-cards (remove :valid cards)
-              updated-cards (concat (:cards-with-ids result) invalid-cards)]
+              updated-cards (concat (get-in result [:result :cards-with-ids]) invalid-cards)]
           {:state (-> state
                       (assoc :status-message
-                             (str "Pushed " (:added result) " cards"
-                                  (when (> (:duplicates result) 0)
-                                    (str ", " (:duplicates result) " duplicates")))
+                             (str "Pushed " (get-in result [:result :added]) " cards"
+                                  (when (> (get-in result [:result :duplicates]) 0)
+                                    (str ", " (get-in result [:result :duplicates]) " duplicates")))
                              :pushing-cards? false
                              :parsed-cards updated-cards))})
         {:state (-> state
