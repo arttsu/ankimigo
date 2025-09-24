@@ -393,3 +393,74 @@ Effects System (effects.clj)
 ```
 
 All functionality verified working: app startup, copy prompt, paste response, fetch decks, push to Anki, error handling.
+
+## Architecture Improvement (Session 2 - Continued)
+
+After implementing the initial PR feedback, we further improved the architecture based on the insight that the API layer should handle its own exceptions and return consistent result types.
+
+### Additional Improvements Made
+
+**Problem**: Exception handling was duplicated between API and business layers, and business logic was impure due to exception handling.
+
+**Solution**: Move all exception handling to API layer and make business logic pure.
+
+#### Changes Made
+
+1. **Centralized Exception Handling in API Layer** ✅
+   - Moved all HTTP exception handling from `anki.clj` to `anki-api.clj`
+   - API layer now owns all HTTP concerns including failures
+   - Specific exceptions (`ConnectException`, `SocketTimeoutException`, `IOException`) handled with meaningful messages
+   - No generic `Exception` catches in API layer (handled by effects layer as safety net)
+
+2. **API Layer Returns Result Types** ✅
+   - `fetch-deck-names()` returns `{:success true/false :result/:error}`
+   - `add-notes()` returns `{:success true/false :result/:error}`
+   - Consistent interface across all API functions
+
+3. **Pure Business Logic** ✅
+   - `anki.clj` functions are now pure - no exception handling
+   - `fetch-deck-names` became a simple passthrough: `(api/fetch-deck-names)`
+   - `push-cards-to-anki` focuses only on business rules and data transformation
+   - Removed all imports of `java.net` and `java.io` from business layer
+
+4. **DRY Exception Handling** ✅
+   - Centralized all HTTP exception handling in `call-anki-connect`
+   - `fetch-deck-names` and `add-notes` no longer duplicate exception handling
+   - Single place to maintain HTTP error handling logic
+
+### Final Architecture (Improved)
+
+```
+Effects System (effects.clj)
+└── http-effect                    # Generic Exception safety net
+
+HTTP Layer (anki-api.clj)
+├── call-anki-connect             # Centralized HTTP + exception handling
+├── fetch-deck-names              # AnkiConnect protocol only
+└── add-notes                     # AnkiConnect protocol only
+
+Business Logic (anki.clj) - PURE FUNCTIONS
+├── fetch-deck-names              # Passthrough to API
+├── cards-to-anki-notes           # Data transformation
+├── process-add-notes-response    # Result processing
+└── push-cards-to-anki           # Business rules only
+```
+
+### Benefits Achieved
+
+1. **Single Responsibility**: Each layer has one clear purpose
+2. **DRY Principle**: No duplicated exception handling
+3. **Pure Business Logic**: Easier to test and reason about
+4. **Consistent API**: All API functions return same result format
+5. **Better Error Handling**: Specific exceptions with meaningful messages
+6. **Maintainability**: Adding new AnkiConnect calls gets exception handling for free
+
+### Exception Handling Strategy
+
+- **API Layer** (`anki-api.clj`): Handles specific HTTP exceptions with user-friendly messages
+- **Effects Layer** (`effects.clj`): Catches generic `Exception` as final safety net
+- **Business Layer** (`anki.clj`): Pure functions, no exception handling
+
+This follows the agreed principle: specific exceptions where meaningful, generic exceptions only as last resort safety net.
+
+All functionality verified working with improved architecture.
